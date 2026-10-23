@@ -1,0 +1,21 @@
+{
+  "name": "panasonic-rcp-electron",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AG-CX370 CCU panel with NDI previews (Electron)",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node scripts/run-tests.js",
+    "postinstall": "electron-builder install-app-deps",
+    "dist": "electron-builder --win --arm64"
+  },
+  "dependencies": {
+    "better-sqlite3": "13.0.3",
+    "fast-xml-parser": "5.11.2"
+  },
+  "devDependencies": {
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3"
+  }
+}

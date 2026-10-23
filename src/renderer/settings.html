@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AG-CX370 CCU — Settings</title>
+<link rel="stylesheet" href="assets/css/panel.css">
+</head>
+<body>
+<header class="truck-header">
+    <h1>AG-CX370 &mdash; Settings</h1>
+    <a href="index.html" class="nav-link">&larr; Back to Panel</a>
+</header>
+
+<main class="settings-page">
+    <section class="settings-section">
+        <h2>Global</h2>
+        <div class="settings-form">
+            <label class="settings-field">
+                <span>Connect Timeout (ms)</span>
+                <input type="number" id="set-connect-ms" min="100" max="30000">
+            </label>
+            <label class="settings-field">
+                <span>Total Timeout (ms)</span>
+                <input type="number" id="set-total-ms" min="100" max="30000">
+            </label>
+            <label class="settings-field">
+                <span>Fast Poll Interval (ms)</span>
+                <input type="number" id="set-fast-ms" min="200" max="60000">
+            </label>
+            <label class="settings-field">
+                <span>Slow Health Poll Interval (ms)</span>
+                <input type="number" id="set-slow-ms" min="1000" max="300000">
+            </label>
+        </div>
+    </section>
+
+    <section class="settings-section">
+        <h2>Channels</h2>
+        <div id="channel-settings-table" class="channel-settings-table"></div>
+    </section>
+
+    <div class="settings-actions">
+        <button id="settings-save-btn" type="button">Save Settings</button>
+        <span id="settings-status" class="settings-status"></span>
+    </div>
+</main>
+
+<script type="module" src="assets/js/settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+appId: local.panasonic-rcp
+productName: AG-CX370 CCU
+directories:
+  output: dist
+files:
+  - src/**/*
+  - package.json
+# Native modules can't load from inside the asar archive.
+asarUnpack:
+  - "**/*.node"
+win:
+  target:
+    - target: nsis
+      arch:
+        - arm64
+  # Signing (Phase 5): set up Authenticode (e.g. Azure Trusted Signing) here.
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

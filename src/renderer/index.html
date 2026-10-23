@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AG-CX370 CCU</title>
+<link rel="stylesheet" href="assets/css/panel.css">
+</head>
+<body>
+<header class="truck-header">
+    <h1>AG-CX370 &mdash; CCU Panel</h1>
+    <div class="header-actions">
+        <div id="global-status" class="global-status" role="status" aria-live="polite"></div>
+        <button type="button" id="scenes-open-btn" class="nav-link-btn">Scenes</button>
+        <a href="settings.html" class="nav-link">Settings &rarr;</a>
+    </div>
+</header>
+
+<main id="strips" class="strips" aria-label="Camera channel strips">
+    <div class="strip" id="channel-1" data-channel="1"></div>
+    <div class="strip" id="channel-2" data-channel="2"></div>
+    <div class="strip" id="channel-3" data-channel="3"></div>
+    <div class="strip" id="channel-4" data-channel="4"></div>
+</main>
+
+<div id="scene-modal" class="modal hidden" aria-hidden="true">
+    <div id="scene-manager" class="modal-content scene-modal-content" aria-label="Scene manager">
+        <div class="modal-header">
+            <h2>Scenes</h2>
+            <button type="button" id="scene-modal-close-btn" class="modal-close-btn" aria-label="Close">&times;</button>
+        </div>
+        <div class="scene-save">
+            <input type="text" id="scene-name-input" placeholder="Scene name&hellip;" maxlength="60">
+            <select id="scene-scope-select">
+                <option value="all">All 4 channels</option>
+                <option value="1">CH1 only</option>
+                <option value="2">CH2 only</option>
+                <option value="3">CH3 only</option>
+                <option value="4">CH4 only</option>
+            </select>
+            <button type="button" id="scene-save-btn">Save Scene</button>
+        </div>
+        <ul id="scene-list" class="scene-list"></ul>
+    </div>
+</div>
+
+<div id="channel-config-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-content">
+        <h2>Channel Configuration</h2>
+        <form id="channel-config-form">
+            <input type="hidden" id="config-channel-id">
+            <label>Name <input type="text" id="config-display-name" maxlength="24" required></label>
+            <label>IP Address <input type="text" id="config-ip-address" placeholder="192.168.0.11" required></label>
+            <div class="modal-actions">
+                <button type="button" id="config-cancel-btn">Cancel</button>
+                <button type="submit">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script type="module" src="assets/js/app.js"></script>
+</body>
+</html>
