@@ -170,7 +170,9 @@ test('scenes save, recall onto the camera and report per-channel results', async
 test('an ignored write fails with not_applied and stores the camera\'s real value', async () => {
     const t = await setup({ ignoredWrites: ['BGain'] });
     try {
-        await rejectsWith(t.handlers.setControl({ channel: 1, control: 'wb_b', value: 90 }), 'not_applied');
+        await assert.rejects(t.handlers.setControl({ channel: 1, control: 'wb_b', value: 90 }), (err) => (
+            err.code === 'not_applied' && err.message === 'Camera acknowledged BGain but reads back -2'
+        ));
         assert.equal(t.store.getChannelState(1).wb_b, 40, 'BGain -2 of -10..10, not the 90 that was sent');
         assert.equal(t.store.getHealth(1).status, 'ok');
     } finally {

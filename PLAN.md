@@ -108,7 +108,7 @@ Run every spike on the target hardware: a Windows ARM64 machine, using a native 
    - It supports the lowest-bandwidth receive setting.
 
    Community bindings exist on npm, but check how recently each one was maintained and whether it supports arm64. If none is acceptable, which is likely on ARM64, write a small N-API addon around the SDK's `find`, `recv` and `framesync` calls.
-4. **better-sqlite3 on arm64.** *Mostly answered:* better-sqlite3 13 is an N-API module and its npm package includes `prebuilds/win32-arm64.node`, so no per-Electron rebuild is needed. It still needs to be confirmed on the device. Original check: whether a win32-arm64 prebuild exists for the pinned Electron. If not, confirm it builds from source with the VS 2022 (17.4 or later) ARM64 toolchain. If neither works, fall back to Node's built-in `node:sqlite`, provided it's stable in the pinned Electron's Node version, since it needs no native rebuild.
+4. **better-sqlite3 on arm64.** *Answered on the dev machine (win32-arm64), 2026-10-23:* better-sqlite3 13 is an N-API module and its npm package includes `prebuilds/win32-arm64.node`, which loads in Electron 44.5.1 arm64 with no rebuild. Confirm it again on the reference device if that's a different machine. One catch: npm still runs `node-gyp rebuild` on install because the package ships a `binding.gyp`, so `npm install` fails without Python and the VS build tools, even though the build step itself does nothing. Original check: whether a win32-arm64 prebuild exists for the pinned Electron. If not, confirm it builds from source with the VS 2022 (17.4 or later) ARM64 toolchain. If neither works, fall back to Node's built-in `node:sqlite`, provided it's stable in the pinned Electron's Node version, since it needs no native rebuild.
 5. **Throughput.** On the target ARM64 device, receive one feed at lowest bandwidth and send its frames to a canvas. Measure latency, CPU and GPU, then repeat with 4 feeds. Also check that WebGL works on the device's GPU driver (ANGLE on D3D11).
 
 Exit criteria: four previews render smoothly with P2 control active at the same time, on a Windows ARM64 machine running a native arm64 build.
@@ -149,6 +149,8 @@ Improvements to make while porting:
 
 ### Phase 3: Read-back from the camera
 
+*Done 2026-10-23 and checked on the camera.* Sets that the camera acknowledges but doesn't hold fail with the code `not_applied`, and the error names the value the camera read back. Zoom and focus speed and the AWB trigger are motion commands, so they aren't read back. A read-back counts as applied when it maps to the same UI value, so a camera that rounds to its own step size still passes.
+
 The PHP panel shows the values the app last sent, so changes made on the camera body never appear, and ignored writes look like successes.
 
 - **After each set**, query the value back (`$X:?`). Report a failure if it didn't change; this is the R/B gain case below.
@@ -186,8 +188,9 @@ Tested against an AG-CX370, serial DV24782369EC48, on 2026-10-22 and 2026-10-23.
 - **Session:** send `$Connect:=On` and `$MyName:s<name>`. The reply's `CamCtl[@SessionID]` is the session ID, and every later `CamCtl` must carry it. End with `$Connect:=Off`.
 - **Discovery reply** (`<Query Type="env"/>`): includes `ModelName`, `SerialNo.`, `CmdTimeout` (5000) and `RTInfo/Port` (49153/udp, a real-time status feed; not used yet).
 - **Query forms:**
-  - `$X:c` returns the range (`$Irs:i0,20000`), or `$X:i!` if the command doesn't exist.
-  - `$X:?` returns the current value (`$Irs:s3363`).
+  - `$X:c` returns the range (`$Irs:i0,20000`), or `$X:i!` if the command has no numeric range. On/off and enum commands such as `$AIrsSw` and `$WBalSel` answer `:i!` too.
+  - `$X:?` returns the current value after `:s`. Confirmed for all 8 read-back fields: numbers (`$Irs:s229`, `$AIrsLv:s-2`), `On`/`Off` (`$AIrsSw:sOn`) and the WB mode letter (`$WBalSel:sB`).
+  - A set is applied by the time it's acknowledged: `$AIrsLv:=-1` read back as −1 about 20 ms later, on the first read.
   - `$X:=v` sets it. A successful set is often acknowledged with a self-closing `<P2Control />`.
 - **Rejections:**
   - A reply ending `:!` with `Msg="Not Supported"` means the command isn't supported.
@@ -200,12 +203,13 @@ Tested against an AG-CX370, serial DV24782369EC48, on 2026-10-22 and 2026-10-23.
   | `$AIrsSw` | On/Off | Auto iris. |
   | `$AIrsLv` | −50..50 | **Exposure compensation** (auto iris level). Holds its value; confirmed on the camera's screen. |
   | `$AIrsLvEf` | −50..50 | Probably the "auto iris level effect" menu item. Not written to yet, and its meaning is unconfirmed. |
-  | `$RGain` / `$BGain` | −10..10 | ⚠️ **Writes are acknowledged but ignored** (R stayed 0 and B stayed −2 while WB mode was B). Likely gated by a camera mode or menu setting that hasn't been found yet. |
+  | `$RGain` / `$BGain` | −10..10 on 2026-10-22; **−200..200** on 2026-10-23 | The range may depend on a camera mode, which could be a clue to the ignored writes. The app reads it with `:c` on every set, so either range works. ⚠️ **Writes are acknowledged but ignored** (R stayed 0 and B stayed −2 while WB mode was B). Likely gated by a camera mode or menu setting that hasn't been found yet. |
   | `$WBalSel` | A / B / Preset | |
   | `$Awb:Act` | — | Always answers busy (`:#`) at first; poll `$Awb:?` until it settles. |
   | `$RTlySw`, `$AFcSw` | On/Off | Tally and auto focus. |
   | `$ZmSpd`, `$FcSpd` | queried with `:c` | Zoom and focus speed; the UI uses 1..99 with 50 as stop. |
 
+- **Intermittent `not_applied`:** once on 2026-10-23, auto iris Off and an Exp Comp drag were acknowledged but read back different values. Neither reproduced later the same day. The suspected cause is another controller connected at the same time; the next occurrence's error will show the camera's value.
 - **Unresolved:** R/B gain writes. To investigate, change R gain on the camera's menu, read `$RGain:?` to see whether it follows, and look for a lock or mode setting nearby on that menu page. This should be solved in the PHP app before Phase 2, or the port carries the same problem.
 
 ---

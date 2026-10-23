@@ -168,7 +168,8 @@ function createHandlers(ctx) {
             await refreshValues(channelId);
         }
         const [message, code] = FAILURE_CODES[response.state] ?? FAILURE_CODES[CameraState.UNEXPECTED];
-        throw new ApiError(message, code);
+        // The camera's own value is the useful part of a not_applied failure, so pass it through.
+        throw new ApiError(response.state === CameraState.NOT_APPLIED ? response.error : message, code);
     }
 
     function getConfig() {
