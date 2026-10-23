@@ -25,5 +25,17 @@ win:
         - arm64
   # Signing (Phase 5): set up Authenticode (e.g. Azure Trusted Signing) here.
 nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
+  # Pack the app as zip, not 7z. On an ARM64 build machine electron-builder's
+  # 7-Zip (24.x) applies its ARM64 filter to ARM64 .exe/.dll files, which the
+  # installer's extractor can't decode: it silently skipped them, so the app
+  # exe was missing after install and the shortcuts pointed at nothing.
+  # useZip only takes effect with differential packages off; those exist for
+  # auto-update, which this app doesn't use.
+  useZip: true
+  differentialPackage: false
+  # One-click, per-user: installs to %LOCALAPPDATA%\Programs with no prompts and
+  # no admin rights, adds desktop and Start menu shortcuts, then launches.
+  # (An all-users install would land in "Program Files (x86)": the 32-bit
+  # installer doesn't treat ARM64 Windows as 64-bit.)
+  oneClick: true
+  perMachine: false
