@@ -1,6 +1,7 @@
 import { createChannelStrip } from './channelStrip.js';
 import { startPoller } from './poller.js';
 import { initSceneManager } from './sceneManager.js';
+import { startNdiPreviews } from './ndiView.js';
 import * as api from './api.js';
 
 const CHANNEL_IDS = [1, 2, 3, 4];
@@ -60,6 +61,7 @@ async function bootstrap() {
         }
 
         sceneManager = initSceneManager();
+        startNdiPreviews(Object.fromEntries(CHANNEL_IDS.map((id) => [id, strips[id].preview])));
 
         startPoller({
             fastMs: settings.poll.fast_ms,

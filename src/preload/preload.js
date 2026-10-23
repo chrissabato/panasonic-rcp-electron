@@ -15,4 +15,12 @@ contextBridge.exposeInMainWorld('rcp', {
     recallScene: invoke('recallScene'),
     getSettings: invoke('getSettings'),
     saveSettings: invoke('saveSettings'),
+    // Asks for a port to the NDI process; it arrives as a window "message" event (see below).
+    ndiConnect: () => ipcRenderer.send('ndi:connect'),
+});
+
+// MessagePorts can't cross contextBridge, so the NDI preview port is handed to
+// the page with window.postMessage, restricted to this page's own origin.
+ipcRenderer.on('ndi:port', (event) => {
+    window.postMessage({ type: 'rcp:ndi-port' }, window.location.origin, event.ports);
 });

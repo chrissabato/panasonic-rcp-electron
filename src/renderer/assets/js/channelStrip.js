@@ -2,6 +2,7 @@ import { createKnob } from './controls/knob.js';
 import { createToggle } from './controls/toggle.js';
 import { createRocker } from './controls/rocker.js';
 import { createXyPad } from './controls/xyPad.js';
+import { createNdiView } from './ndiView.js';
 import * as api from './api.js';
 
 const PENDING_GUARD_MS = 1500; // ignore poller values for a control we just set, until confirmed or this expires
@@ -18,6 +19,7 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
     const pendingUntil = {};
     const lastSentAt = {};
     const els = {};
+    const preview = createNdiView();
 
     function init(schema, channelData) {
         root.innerHTML = '';
@@ -92,7 +94,7 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         recallBtn.addEventListener('click', () => onQuickRecall?.(channelId));
         recallRow.append(recallBtn);
 
-        root.append(header, els.healthNote, els.tally, controlGroup, recallRow);
+        root.append(header, els.healthNote, preview.el, els.tally, controlGroup, recallRow);
 
         update(channelData);
     }
@@ -271,5 +273,5 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         root.classList.toggle('offline', health.status === 'unreachable');
     }
 
-    return { init, update, updateHealth };
+    return { init, update, updateHealth, preview };
 }

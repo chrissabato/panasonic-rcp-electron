@@ -111,6 +111,8 @@ Run every spike on the target hardware: a Windows ARM64 machine, using a native 
 4. **better-sqlite3 on arm64.** *Answered on the dev machine (win32-arm64), 2026-10-23:* better-sqlite3 13 is an N-API module and its npm package includes `prebuilds/win32-arm64.node`, which loads in Electron 44.5.1 arm64 with no rebuild. Confirm it again on the reference device if that's a different machine. One catch: npm still runs `node-gyp rebuild` on install because the package ships a `binding.gyp`, so `npm install` fails without Python and the VS build tools, even though the build step itself does nothing. Original check: whether a win32-arm64 prebuild exists for the pinned Electron. If not, confirm it builds from source with the VS 2022 (17.4 or later) ARM64 toolchain. If neither works, fall back to Node's built-in `node:sqlite`, provided it's stable in the pinned Electron's Node version, since it needs no native rebuild.
 5. **Throughput.** On the target ARM64 device, receive one feed at lowest bandwidth and send its frames to a canvas. Measure latency, CPU and GPU, then repeat with 4 feeds. Also check that WebGL works on the device's GPU driver (ANGLE on D3D11).
 
+   *Drawing side measured 2026-10-23 on the dev machine (win32-arm64, 12 cores), with generated frames instead of NDI, so no decode cost is included:* WebGL2 works. Four previews draw a steady 30 fps each. At 640×360 UYVY the whole app uses 34% of one core (2.9% of the machine). At 1920×1080 it uses 106% of one core (8.8%), mostly copying pixels through the renderer and the NDI process. Still to measure with the SDK: NDI|HX decode cost and end-to-end latency.
+
 Exit criteria: four previews render smoothly with P2 control active at the same time, on a Windows ARM64 machine running a native arm64 build.
 
 ### Phase 1: Scaffold
@@ -159,10 +161,13 @@ The PHP panel shows the values the app last sent, so changes made on the camera 
 
 ### Phase 4: NDI previews
 
+*In progress.* Built and working with generated test frames (run with `RCP_FAKE_NDI=1`, or a size such as `RCP_FAKE_NDI=1920x1080`): the utilityProcess (`src/ndi/`), its MessagePort to the renderer, frame pacing, the WebGL2 UYVY/BGRA view per strip, and the status overlays. Without `RCP_FAKE_NDI`, every channel shows "No source". Still to do: the SDK receiver, discovery and channel matching, and the Settings dropdown.
+
 - **Runtime:** load the arm64 NDI runtime DLL bundled in the app's `resources/`. Don't rely on a system-installed NDI Runtime, which may be x64.
 - **Discovery:** use NDI find in the utilityProcess, and match each source to a channel. The default match is the source name containing the camera's IP or display name. Add a per-channel "NDI source" dropdown in Settings to override it.
 - **Receivers:** one per channel, set to lowest bandwidth. Use the SDK's framesync so the renderer always pulls the latest frame and never builds a backlog. Cap the preview at about 30 fps.
-- **Transport:** send each frame over a `MessagePort` as a transferable `ArrayBuffer`. Include width, height, stride and pixel format (UYVY or BGRA).
+- **Transport:** send each frame over a `MessagePort`, with width, height, stride and pixel format (UYVY or BGRA). Between processes the data is always copied when it's sent; a transfer list can't avoid that, and Electron's `MessagePortMain` only transfers ports anyway. The renderer acks each drawn frame, and a channel's next frame waits for that ack, so a slow renderer drops frames instead of queueing them.
+- **Pacing:** pace frames by due time on a short timer, not with a `1000/fps` interval. Windows timers fire on a ~15.6 ms clock, so a 33 ms interval runs at ~47 ms, which is 21 fps (measured).
 - **Rendering:** add `ndiView.js` with one canvas per strip, above the tally lamp. Use WebGL, converting UYVY→RGB in a fragment shader so the CPU doesn't do it. Fall back to `putImageData` for BGRA.
 - **States:** show "No source", "Connecting" and "No signal" overlays, and reconnect automatically if a source disappears.
 - **Tally (optional):** the panel's tally toggle could also send NDI tally metadata to the receiver. Decide whether that's wanted alongside the P2 `$RTlySw` tally.

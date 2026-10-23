@@ -1,6 +1,6 @@
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { app, BrowserWindow, dialog, net, protocol } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, net, protocol } = require('electron');
 
 const APP_ORIGIN = 'app://rcp';
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
@@ -95,6 +95,7 @@ async function start() {
     const { registerIpc } = require('./ipc');
     const { HealthPoller } = require('./poller');
     const { createSecrets } = require('./secrets');
+    const { NdiHost } = require('./ndiHost');
 
     const store = new StateStore(path.join(app.getPath('userData'), 'rcp.sqlite'), {
         defaultSettings: DEFAULT_SETTINGS,
@@ -127,6 +128,12 @@ async function start() {
     poller = new HealthPoller({ pollChannel, getIntervalMs: () => store.getSettings().poll.slow_ms });
     poller.start();
 
+    const ndi = new NdiHost();
+    ndi.start();
+    ipcMain.on('ndi:connect', (event) => {
+        if (isAppUrl(event.senderFrame?.url)) ndi.connect(event.sender);
+    });
+
     serveRenderer();
     createWindow();
 
@@ -135,6 +142,7 @@ async function start() {
     });
     app.on('will-quit', () => {
         poller.stop();
+        ndi.stop();
         store.close();
     });
 }
