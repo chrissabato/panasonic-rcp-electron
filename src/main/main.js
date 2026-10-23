@@ -67,6 +67,8 @@ function createWindow() {
         width: 1400,
         height: 900,
         backgroundColor: '#111',
+        // Installed, the exe carries the icon; in development, point the window at it.
+        icon: app.isPackaged ? undefined : path.join(__dirname, '..', '..', 'build', 'icon.png'),
         webPreferences: {
             preload: path.join(__dirname, '..', 'preload', 'preload.js'),
             contextIsolation: true,

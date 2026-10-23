@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- AG-CX370 CCU panel icon: a lens iris in the panel's accent blue, with a red tally dot.
+       Source for build/icon.ico and build/icon.png; regenerate with "npm run build:icons". -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b3039"/>
+      <stop offset="1" stop-color="#121418"/>
+    </linearGradient>
+    <radialGradient id="glass" cx="0.42" cy="0.38" r="0.7">
+      <stop offset="0" stop-color="#1d3b66"/>
+      <stop offset="1" stop-color="#0b1220"/>
+    </radialGradient>
+    <radialGradient id="tally" cx="0.4" cy="0.35" r="0.65">
+      <stop offset="0" stop-color="#ff8a80"/>
+      <stop offset="0.55" stop-color="#e0473f"/>
+      <stop offset="1" stop-color="#a8261f"/>
+    </radialGradient>
+  </defs>
+  <rect x="32" y="32" width="960" height="960" rx="210" fill="url(#bg)"/>
+  <rect x="32" y="32" width="960" height="960" rx="210" fill="none" stroke="#3a404a" stroke-width="12"/>
+  <circle cx="512" cy="540" r="300" fill="url(#glass)"/>
+  <path d="M542.5 426.0L626.0 509.5L595.4 623.4L481.5 654.0L398.0 570.5L428.6 456.6Z" fill="#05080d"/>
+  <path d="M542.5 426.0L779.2 662.7M626.0 509.5L539.4 832.7M595.4 623.4L272.2 710.1M481.5 654.0L244.8 417.3M398.0 570.5L484.6 247.3M428.6 456.6L751.8 369.9" fill="none" stroke="#3d8bfd" stroke-width="34" stroke-linecap="round"/>
+  <circle cx="512" cy="540" r="300" fill="none" stroke="#3d8bfd" stroke-width="56"/>
+  <circle cx="808" cy="216" r="92" fill="#e0473f" opacity="0.25"/>
+  <circle cx="808" cy="216" r="70" fill="url(#tally)"/>
+</svg>

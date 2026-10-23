@@ -17,6 +17,8 @@ extraResources:
 asarUnpack:
   - "**/*.node"
 win:
+  # Generated from build/icon.svg by "npm run build:icons".
+  icon: build/icon.ico
   target:
     - target: nsis
       arch:
