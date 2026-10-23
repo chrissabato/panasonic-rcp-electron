@@ -13,8 +13,12 @@ const DRAG_THROTTLE_MS = 120;
  * rcp.setControl, which forwards it straight to the camera. A per-control
  * "pending" guard stops a stale poll from clobbering a value the user just
  * dragged before the set's reply (or next poll) confirms it.
+ *
+ * Linking: every change the user makes here is reported through
+ * onLocalChange, and app.js replays it on the other linked strips with
+ * mirror(), which runs the same path minus the report, so it never echoes.
  */
-export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecall } = {}) {
+export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecall, onLocalChange, onLinkToggle } = {}) {
     const widgets = {};
     const pendingUntil = {};
     const lastSentAt = {};
@@ -40,7 +44,15 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         els.ip.title = 'Click to edit IP / name';
         els.ip.addEventListener('click', () => onConfigOpen?.(channelId, channelData.config));
 
-        header.append(title, els.ip);
+        els.link = document.createElement('button');
+        els.link.type = 'button';
+        els.link.className = 'strip-link';
+        els.link.textContent = 'LINK';
+        els.link.title = 'Link this strip: changes on any linked strip apply to all linked strips';
+        els.link.setAttribute('aria-pressed', 'false');
+        els.link.addEventListener('click', () => onLinkToggle?.(channelId));
+
+        header.append(title, els.link, els.ip);
 
         els.healthNote = document.createElement('div');
         els.healthNote.className = 'health-note';
@@ -51,7 +63,7 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         els.tally.addEventListener('click', () => {
             const next = !widgets.tally.getValue();
             widgets.tally.setValue(next);
-            send('tally', next);
+            handleChange('tally', next, true);
         });
         widgets.tally = {
             setValue: (v) => { els.tally.classList.toggle('on', !!v); widgets.tally._v = !!v; },
@@ -70,17 +82,24 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
             buildPaintPadCell(schema.wb_r, schema.wb_b),
         ]));
 
+        // Only one of Iris and Exp Comp applies at a time: manual iris is
+        // overridden by the camera's auto loop, and Exp Comp only steers auto
+        // iris. updateIrisMode() shows the one that matches Auto Iris.
+        els.irisCell = buildKnobCell('iris', schema.iris);
+        els.expCompCell = buildKnobCell('iris_level', schema.iris_level);
         controlGroup.append(groupLabel('Iris'));
         controlGroup.append(buildLine([
-            buildKnobCell('iris', schema.iris),
-            buildKnobCell('iris_level', schema.iris_level),
+            els.irisCell,
+            els.expCompCell,
             buildToggleCell('auto_iris', schema.auto_iris),
         ]));
 
         controlGroup.append(groupLabel('Lens'));
         controlGroup.append(buildLine([
-            buildRockerCell('zoom', schema.zoom),
-            buildRockerCell('focus', schema.focus),
+            buildStack([
+                buildRockerCell('zoom', schema.zoom),
+                buildRockerCell('focus', schema.focus),
+            ]),
             buildToggleCell('auto_focus', schema.auto_focus),
         ]));
 
@@ -200,6 +219,7 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         button.textContent = 'Trigger';
         button.addEventListener('click', async () => {
             button.disabled = true;
+            onLocalChange?.(channelId, control, true, true);
             try {
                 await send(control, true);
             } finally {
@@ -210,7 +230,36 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         return cell(def.label, button);
     }
 
+    function updateIrisMode() {
+        const auto = widgets.auto_iris.getValue();
+        els.irisCell.hidden = auto;
+        els.expCompCell.hidden = !auto;
+    }
+
+    /** A change made on this strip: apply it, and report it so linked strips follow. */
     function handleChange(control, value, final) {
+        applyChange(control, value, final);
+        onLocalChange?.(channelId, control, value, final);
+    }
+
+    /** A change made on a linked strip: show it here and send it to this camera too. */
+    function mirror(control, value, final) {
+        if (control === 'trigger_awb') {
+            send(control, true);
+            return;
+        }
+        widgets[control]?.setValue(value);
+        applyChange(control, value, final);
+    }
+
+    function setLinked(on) {
+        root.classList.toggle('linked', on);
+        els.link.classList.toggle('on', on);
+        els.link.setAttribute('aria-pressed', String(on));
+    }
+
+    function applyChange(control, value, final) {
+        if (control === 'auto_iris') updateIrisMode();
         pendingUntil[control] = Date.now() + PENDING_GUARD_MS;
         const now = Date.now();
         if (!final && lastSentAt[control] && now - lastSentAt[control] < DRAG_THROTTLE_MS) {
@@ -243,6 +292,7 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
             if (pendingUntil[control] && Date.now() < pendingUntil[control]) continue;
             widgets[control]?.setValue(value);
         }
+        updateIrisMode();
 
         updateHealth(channelData.health);
     }
@@ -273,5 +323,5 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         root.classList.toggle('offline', health.status === 'unreachable');
     }
 
-    return { init, update, updateHealth, preview };
+    return { init, update, updateHealth, preview, mirror, setLinked };
 }

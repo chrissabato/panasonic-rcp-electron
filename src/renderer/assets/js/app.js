@@ -6,6 +6,48 @@ import * as api from './api.js';
 
 const CHANNEL_IDS = [1, 2, 3, 4];
 const strips = {};
+const LINKED_KEY = 'rcp.linkedChannels';
+
+// Linked strips move together: a change on one is replayed on the others.
+// Remembered per machine; a missing or blocked localStorage just starts unlinked.
+const linked = new Set(loadLinked());
+const linkAllBtn = document.getElementById('link-all-btn');
+
+function loadLinked() {
+    try {
+        const ids = JSON.parse(localStorage.getItem(LINKED_KEY) ?? '[]');
+        return Array.isArray(ids) ? ids.filter((id) => CHANNEL_IDS.includes(id)) : [];
+    } catch {
+        return [];
+    }
+}
+
+function showLinked() {
+    for (const id of CHANNEL_IDS) strips[id]?.setLinked(linked.has(id));
+    linkAllBtn.textContent = linked.size === CHANNEL_IDS.length ? 'Unlink all' : 'Link all';
+    try {
+        localStorage.setItem(LINKED_KEY, JSON.stringify([...linked]));
+    } catch { /* not remembered; still works for this session */ }
+}
+
+function toggleLinked(channelId) {
+    if (linked.has(channelId)) linked.delete(channelId);
+    else linked.add(channelId);
+    showLinked();
+}
+
+function replayOnLinked(sourceId, control, value, final) {
+    if (!linked.has(sourceId)) return;
+    for (const id of linked) {
+        if (id !== sourceId) strips[id]?.mirror(control, value, final);
+    }
+}
+
+linkAllBtn.addEventListener('click', () => {
+    if (linked.size === CHANNEL_IDS.length) linked.clear();
+    else CHANNEL_IDS.forEach((id) => linked.add(id));
+    showLinked();
+});
 
 const globalStatus = document.getElementById('global-status');
 const modal = document.getElementById('channel-config-modal');
@@ -55,11 +97,14 @@ async function bootstrap() {
             const strip = createChannelStrip(channelId, root, {
                 onConfigOpen: openConfigModal,
                 onQuickRecall: (id) => sceneManager?.recallLastOnChannel(id),
+                onLocalChange: replayOnLinked,
+                onLinkToggle: toggleLinked,
             });
             strip.init(data.controls, data.channels[channelId]);
             strips[channelId] = strip;
         }
 
+        showLinked();
         sceneManager = initSceneManager();
         startNdiPreviews(Object.fromEntries(CHANNEL_IDS.map((id) => [id, strips[id].preview])));
 
