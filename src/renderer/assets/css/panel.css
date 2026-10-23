@@ -54,6 +54,10 @@ body:has(> .strips) {
     cursor: pointer;
 }
 .nav-link-btn:hover { color: var(--accent); }
+.preview-toggle {
+    border: 1px solid var(--border); border-radius: 4px; padding: 3px 10px;
+}
+.preview-toggle.on { color: var(--accent); border-color: var(--accent); background: rgba(61,139,253,0.15); }
 
 .settings-page { max-width: 900px; margin: 0 auto; padding: 18px; display: flex; flex-direction: column; gap: 18px; }
 .settings-section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
@@ -168,6 +172,19 @@ body:has(> .strips) {
     font-size: 12px; letter-spacing: .04em;
 }
 .ndi-overlay[hidden] { display: none; }
+.ndi-toggle {
+    position: absolute; right: 6px; bottom: 6px;
+    background: rgba(20,22,26,0.75);
+    border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text-dim);
+    font-size: 10px; font-weight: 700; letter-spacing: .04em;
+    padding: 2px 7px;
+    cursor: pointer;
+}
+.ndi-toggle:hover { color: var(--text); border-color: var(--accent); }
+/* A live picture only shows its stop button while the pointer is over it. */
+.ndi-preview.live .ndi-toggle { opacity: 0; transition: opacity .15s; }
+.ndi-preview.live:hover .ndi-toggle, .ndi-preview .ndi-toggle:focus-visible { opacity: 1; }
 
 .tally-lamp {
     height: 26px;

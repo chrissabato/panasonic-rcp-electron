@@ -202,3 +202,15 @@ test('push sources send on arrival, never on the timer, and never a frame twice'
     port.receive({ type: 'ack', channel: 1 });
     assert.equal(port.frames().length, 2, 'nothing new, nothing sent');
 });
+
+test('the renderer starts and stops the previews over the port', () => {
+    const calls = [];
+    const service = createNdiService({ channelIds: [1], now: () => 0, onPreviews: (on) => calls.push(on) });
+    const port = fakePort();
+    service.attach(port);
+    port.receive({ type: 'previews', channels: [1] });
+    port.receive({ type: 'previews', channels: [] });
+    port.receive({ type: 'previews', channels: [1, 7] }); // unknown channels are dropped
+    assert.deepEqual(calls, [[1], [], [1]]);
+    service.setStatus(1, 'stopped'); // a valid status
+});

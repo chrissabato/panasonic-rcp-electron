@@ -3,6 +3,7 @@
 // fragment shader (BT.709, limited range), so the CPU never touches pixels.
 
 const STATUS_TEXT = {
+    stopped: 'Preview off',
     no_source: 'No source',
     connecting: 'Connecting…',
     no_signal: 'No signal',
@@ -100,7 +101,7 @@ function createRenderer(canvas) {
     };
 }
 
-/** One channel's preview: a canvas plus a status overlay. */
+/** One channel's preview: a canvas, a status overlay, and a start/stop button in the corner. */
 export function createNdiView() {
     const el = document.createElement('div');
     el.className = 'ndi-preview';
@@ -109,7 +110,12 @@ export function createNdiView() {
     canvas.height = 360;
     const overlay = document.createElement('div');
     overlay.className = 'ndi-overlay';
-    el.append(canvas, overlay);
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'ndi-toggle';
+    let onToggle = null;
+    toggle.addEventListener('click', () => onToggle?.());
+    el.append(canvas, overlay, toggle);
 
     let renderer = null;
     let unavailable = null;
@@ -131,7 +137,7 @@ export function createNdiView() {
         showStatus();
     });
 
-    let status = 'no_source';
+    let status = 'stopped';
     let lastFrameAt = 0;
 
     function showStatus() {
@@ -159,6 +165,16 @@ export function createNdiView() {
         },
         /** Re-evaluates "no signal" when frames stop arriving. */
         refresh: showStatus,
+        /** Shows whether this preview is on; the corner button offers the opposite. */
+        setRunning(on) {
+            toggle.textContent = on ? '■ Stop' : '▶ Start';
+            toggle.title = on ? 'Stop this preview' : 'Start this preview';
+            toggle.classList.toggle('on', on);
+        },
+        /** fn runs when the corner button is clicked. */
+        onToggle(fn) {
+            onToggle = fn;
+        },
     };
 }
 
@@ -166,9 +182,35 @@ export function createNdiView() {
  * Connects the views ({ channelId: view }) to the NDI process. Frames are
  * drawn on the next animation frame, and only the newest one per channel;
  * each draw is acked so the NDI process sends that channel's next frame.
+ * Previews start stopped. Each view's corner button starts or stops its own
+ * channel; the returned controller's setAll(on) does every channel, and
+ * onChange(fn) reports changes so the header button can update.
  */
 export function startNdiPreviews(views) {
     let port = null;
+    const running = new Set();
+    let changed = null;
+
+    const sendRunning = () => port?.postMessage({ type: 'previews', channels: [...running] });
+
+    function setChannel(channel, on) {
+        if (on) running.add(channel);
+        else {
+            running.delete(channel);
+            pending.delete(channel);
+        }
+        views[channel].setRunning(on);
+    }
+
+    for (const [id, view] of Object.entries(views)) {
+        const channel = Number(id);
+        view.setRunning(false);
+        view.onToggle(() => {
+            setChannel(channel, !running.has(channel));
+            sendRunning();
+            changed?.();
+        });
+    }
     const pending = new Map();
     const drawn = new Map();
     let scheduled = false;
@@ -201,6 +243,8 @@ export function startNdiPreviews(views) {
         port = event.ports[0];
         pending.clear();
         port.onmessage = onMessage;
+        // A new port means a new or restarted NDI process: tell it which previews are on.
+        sendRunning();
     });
     window.rcp.ndiConnect();
 
@@ -217,4 +261,16 @@ export function startNdiPreviews(views) {
         statsSince = performance.now();
         port?.postMessage({ type: 'stats', fps });
     }, STATS_INTERVAL_MS);
+
+    return {
+        setAll(on) {
+            for (const id of Object.keys(views)) setChannel(Number(id), on);
+            sendRunning();
+            changed?.();
+        },
+        allRunning: () => running.size === Object.keys(views).length,
+        onChange(fn) {
+            changed = fn;
+        },
+    };
 }

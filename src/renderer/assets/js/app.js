@@ -12,6 +12,7 @@ const LINKED_KEY = 'rcp.linkedChannels';
 // Remembered per machine; a missing or blocked localStorage just starts unlinked.
 const linked = new Set(loadLinked());
 const linkAllBtn = document.getElementById('link-all-btn');
+const previewToggleBtn = document.getElementById('preview-toggle-btn');
 
 function loadLinked() {
     try {
@@ -106,7 +107,17 @@ async function bootstrap() {
 
         showLinked();
         sceneManager = initSceneManager();
-        startNdiPreviews(Object.fromEntries(CHANNEL_IDS.map((id) => [id, strips[id].preview])));
+        // Previews start stopped each launch: no NDI video is pulled until the
+        // operator starts one (its own corner button) or all (this header button).
+        const previews = startNdiPreviews(Object.fromEntries(CHANNEL_IDS.map((id) => [id, strips[id].preview])));
+        const showPreviewButton = () => {
+            const all = previews.allRunning();
+            previewToggleBtn.textContent = all ? 'Stop all previews' : 'Start all previews';
+            previewToggleBtn.classList.toggle('on', all);
+            previewToggleBtn.setAttribute('aria-pressed', String(all));
+        };
+        previews.onChange(showPreviewButton);
+        previewToggleBtn.addEventListener('click', () => previews.setAll(!previews.allRunning()));
 
         startPoller({
             fastMs: settings.poll.fast_ms,

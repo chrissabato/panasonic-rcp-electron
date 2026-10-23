@@ -13,16 +13,17 @@
  * a frame arrives, and it goes out at once if the renderer is ready.
  *
  * Messages to the renderer:
- *   { type: 'status', channel, status }   no_source | connecting | connected | no_signal
+ *   { type: 'status', channel, status }   stopped | no_source | connecting | connected | no_signal
  *   { type: 'frame', channel, width, height, stride, format, data }
  * Messages from the renderer:
  *   { type: 'ack', channel }               ready for that channel's next frame
  *   { type: 'stats', fps: { channel: n } } frames drawn per second, for measurement
+ *   { type: 'previews', channels: [id] }   the channels whose preview the user has on
  */
-const STATUSES = new Set(['no_source', 'connecting', 'connected', 'no_signal']);
+const STATUSES = new Set(['stopped', 'no_source', 'connecting', 'connected', 'no_signal']);
 const CHECK_INTERVAL_MS = 10;
 
-function createNdiService({ channelIds = [1, 2, 3, 4], fps = 30, now = Date.now, log = null } = {}) {
+function createNdiService({ channelIds = [1, 2, 3, 4], fps = 30, now = Date.now, log = null, onPreviews = null } = {}) {
     const period = 1000 / fps;
     const channels = new Map(channelIds.map((id) => [id, { status: 'no_source', source: null, credit: true, missed: false, due: 0, sent: 0 }]));
     let port = null;
@@ -36,6 +37,8 @@ function createNdiService({ channelIds = [1, 2, 3, 4], fps = 30, now = Date.now,
             if (!ch) return;
             ch.credit = true;
             if (ch.missed) send(data.channel, ch, now());
+        } else if (data?.type === 'previews') {
+            onPreviews?.((Array.isArray(data.channels) ? data.channels : []).filter((id) => channels.has(id)));
         } else if (data?.type === 'stats' && log) {
             const sent = [...channels].map(([id, ch]) => `CH${id} ${ch.sent}`).join(', ');
             const drawn = Object.entries(data.fps ?? {}).map(([id, n]) => `CH${id} ${Number(n).toFixed(1)}`).join(', ');
