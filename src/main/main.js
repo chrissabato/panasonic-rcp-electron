@@ -116,7 +116,7 @@ async function start() {
     };
 
     let poller = null;
-    const { handlers, checkHealth } = createHandlers({
+    const { handlers, pollChannel } = createHandlers({
         store,
         queue: new CommandQueue(),
         clientFor,
@@ -124,7 +124,7 @@ async function start() {
     });
     registerIpc(handlers, { isTrustedSender: (frame) => isAppUrl(frame?.url) });
 
-    poller = new HealthPoller({ checkHealth, getIntervalMs: () => store.getSettings().poll.slow_ms });
+    poller = new HealthPoller({ pollChannel, getIntervalMs: () => store.getSettings().poll.slow_ms });
     poller.start();
 
     serveRenderer();

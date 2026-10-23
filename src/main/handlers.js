@@ -33,6 +33,7 @@ const FAILURE_CODES = {
     [CameraState.UNREACHABLE]: ['Camera unreachable', 'unreachable'],
     [CameraState.AUTH_FAILED]: ['Camera rejected the username or password', 'auth_failed'],
     [CameraState.UNEXPECTED]: ['Unexpected camera response', 'unexpected'],
+    [CameraState.NOT_APPLIED]: ['Camera acknowledged the value but did not apply it', 'not_applied'],
 };
 
 /**
@@ -49,6 +50,7 @@ function createHandlers(ctx) {
     function recordCommandHealth(channelId, response) {
         switch (response.state) {
             case CameraState.OK:
+            case CameraState.NOT_APPLIED: // the camera answered normally; it just kept its own value
                 store.setHealth(channelId, { reachable: true, status: CameraState.OK });
                 break;
             case CameraState.UNREACHABLE:
@@ -92,6 +94,34 @@ function createHandlers(ctx) {
         return store.getHealth(channelId);
     }
 
+    /**
+     * Reads the camera's current values and stores them, so the panel shows
+     * the camera's real state, including changes made on the camera body.
+     * The renderer's pending guard keeps this from moving a control mid-drag.
+     */
+    async function refreshValues(channelId) {
+        if (store.getChannelConfig(channelId).ip_address === '') {
+            return;
+        }
+        const response = await queue.enqueue(channelId, 'readback', () => clientFor(channelId).readValues());
+        recordCommandHealth(channelId, response);
+        if (!response.isOk()) {
+            log(`readback: channel ${channelId} failed (${response.state}): ${response.error ?? ''}`);
+            return;
+        }
+        for (const [control, value] of Object.entries(response.body)) {
+            store.setControlValue(channelId, control, value);
+        }
+    }
+
+    /** One slow-poll tick for a channel: probe it, then read its values back if it's up. */
+    async function pollChannel(channelId) {
+        const health = await checkHealth(channelId);
+        if (health.status === CameraState.OK) {
+            await refreshValues(channelId);
+        }
+    }
+
     function getChannels() {
         const channels = {};
         for (const channelId of CHANNEL_IDS) {
@@ -130,8 +160,12 @@ function createHandlers(ctx) {
             return { channel: channelId, control, value };
         }
 
-        if (response.state === CameraState.UNEXPECTED) {
-            log(`setControl: unexpected camera response for channel ${channelId} control ${control}: ${response.error ?? ''}`);
+        if (response.state === CameraState.UNEXPECTED || response.state === CameraState.NOT_APPLIED) {
+            log(`setControl: ${response.state} camera response for channel ${channelId} control ${control}: ${response.error ?? ''}`);
+        }
+        if (response.state === CameraState.NOT_APPLIED) {
+            // Store what the camera actually holds, so the control snaps back to it.
+            await refreshValues(channelId);
         }
         const [message, code] = FAILURE_CODES[response.state] ?? FAILURE_CODES[CameraState.UNEXPECTED];
         throw new ApiError(message, code);
@@ -329,6 +363,8 @@ function createHandlers(ctx) {
 
     return {
         checkHealth,
+        refreshValues,
+        pollChannel,
         handlers: {
             getChannels,
             setControl,

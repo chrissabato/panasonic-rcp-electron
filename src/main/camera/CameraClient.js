@@ -1,14 +1,47 @@
 const crypto = require('node:crypto');
-const { CameraResponse } = require('./cameraResponse');
+const { CameraState, CameraResponse } = require('./cameraResponse');
 const { P2Connection, parseP2Response, textOf } = require('./p2Connection');
 
 const CONTROLLER_NAME = 'PanasonicRCP';
 const AWB_SETTLED = new Set(['$Awb:sOk', '$Awb:sNg', '$Awb:sBreak']);
+const AWB_MODES = { 1: 'A', 2: 'B', 10: 'Preset' };
+
+/**
+ * Fields read back from the camera on each poll, and the UI control each one
+ * feeds. Scaled fields carry the UI range their live "$X:c" range maps onto,
+ * matching the setters below.
+ */
+const READBACK = [
+    { control: 'iris', field: 'Irs', ui: [0, 100] },
+    { control: 'iris_level', field: 'AIrsLv', ui: [-50, 50] },
+    { control: 'wb_r', field: 'RGain', ui: [0, 100] },
+    { control: 'wb_b', field: 'BGain', ui: [0, 100] },
+    { control: 'auto_iris', field: 'AIrsSw', kind: 'switch' },
+    { control: 'auto_focus', field: 'AFcSw', kind: 'switch' },
+    { control: 'tally', field: 'RTlySw', kind: 'switch' },
+    { control: 'awb_mode', field: 'WBalSel', kind: 'awb' },
+];
+
+const sameText = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+
+/** Converts a non-scaled "$X:?" value into its UI value, or null if it isn't one the UI knows. */
+function parseReadback(kind, text) {
+    if (kind === 'switch') {
+        if (sameText(text, 'On')) return true;
+        if (sameText(text, 'Off')) return false;
+        return null;
+    }
+    const mode = Object.keys(AWB_MODES).find((key) => sameText(AWB_MODES[key], text));
+    return mode === undefined ? null : Number(mode);
+}
 
 const md5 = (s) => crypto.createHash('md5').update(s).digest('hex');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Linearly maps uiValue from [uiMin, uiMax] into [nativeMin, nativeMax], clamping first. */
+/**
+ * Linearly maps uiValue from [uiMin, uiMax] into [nativeMin, nativeMax],
+ * clamping first. With the ranges swapped it maps a camera value back to UI.
+ */
 function scaleToRange(uiValue, uiMin, uiMax, nativeMin, nativeMax) {
     const clamped = Math.max(uiMin, Math.min(uiMax, uiValue));
     const ratio = (clamped - uiMin) / (uiMax - uiMin);
@@ -51,6 +84,9 @@ function parseDeviceInfo(raw) {
  * Numeric controls don't have a fixed native range across models/firmware,
  * so each is queried live with "$X:c" and the UI value is scaled into
  * whatever range the camera reports.
+ *
+ * Every non-momentary set is read back with "$X:?" in the same session, and
+ * reports NOT_APPLIED if the camera acknowledged it but holds another value.
  */
 class CameraClient {
     constructor({ ipAddress, port = 49152, username = '', password = '', connectTimeoutMs = 1500, totalTimeoutMs = 2500 }) {
@@ -63,11 +99,10 @@ class CameraClient {
     }
 
     setAwbMode(mode) {
-        const channels = { 1: 'A', 2: 'B', 10: 'Preset' };
-        if (!Object.hasOwn(channels, mode)) {
+        if (!Object.hasOwn(AWB_MODES, mode)) {
             throw new RangeError(`Invalid AWB mode: ${mode}`);
         }
-        return this.runCamCtlCommand(`$WBalSel:=${channels[mode]}`);
+        return this.runVerifiedSet('WBalSel', AWB_MODES[mode]);
     }
 
     setWbRedGain(uiValue) {
@@ -80,7 +115,7 @@ class CameraClient {
 
     // Red tally only: this camera family has a single-color lamp.
     setTally(on) {
-        return this.runCamCtlCommand(`$RTlySw:=${on ? 'On' : 'Off'}`);
+        return this.runVerifiedSet('RTlySw', on ? 'On' : 'Off');
     }
 
     setIris(uiValue) {
@@ -88,7 +123,7 @@ class CameraClient {
     }
 
     setAutoIris(on) {
-        return this.runCamCtlCommand(`$AIrsSw:=${on ? 'On' : 'Off'}`);
+        return this.runVerifiedSet('AIrsSw', on ? 'On' : 'Off');
     }
 
     /**
@@ -100,18 +135,21 @@ class CameraClient {
         return this.runScaledCamCtlCommand('AIrsLv', uiValue, -50, 50);
     }
 
-    /** Zoom speed, 1-99 (50 = stop), scaled into the camera's own signed speed range. */
+    /**
+     * Zoom speed, 1-99 (50 = stop), scaled into the camera's own signed speed
+     * range. A speed is a motion command, not a value that holds, so it isn't read back.
+     */
     setZoomSpeed(speed) {
-        return this.runScaledCamCtlCommand('ZmSpd', Math.max(1, Math.min(99, speed)), 1, 99);
+        return this.runScaledCamCtlCommand('ZmSpd', Math.max(1, Math.min(99, speed)), 1, 99, { verify: false });
     }
 
     /** Focus speed, same 1-99 (50 = stop) scheme as zoom. */
     setFocusSpeed(speed) {
-        return this.runScaledCamCtlCommand('FcSpd', Math.max(1, Math.min(99, speed)), 1, 99);
+        return this.runScaledCamCtlCommand('FcSpd', Math.max(1, Math.min(99, speed)), 1, 99, { verify: false });
     }
 
     setAutoFocus(on) {
-        return this.runCamCtlCommand(`$AFcSw:=${on ? 'On' : 'Off'}`);
+        return this.runVerifiedSet('AFcSw', on ? 'On' : 'Off');
     }
 
     /**
@@ -167,29 +205,67 @@ class CameraClient {
         return CameraResponse.ok(raw);
     }
 
-    /** Runs a single boolean/enum CamCtl command through a fresh authenticated session. */
-    runCamCtlCommand(command) {
-        return this.withSession((session) => session.camCtl(command));
+    /**
+     * Reads the camera's current value for every READBACK field in one
+     * session. On success the body is { control: uiValue } for each field the
+     * camera answered; a field it rejects is left out rather than failing
+     * the whole read.
+     */
+    readValues() {
+        return this.withSession(async (session) => {
+            const values = {};
+            for (const { control, field, ui, kind } of READBACK) {
+                const current = await session.readValue(field);
+                if (current.state === CameraState.UNREACHABLE || current.state === CameraState.AUTH_FAILED) {
+                    return current;
+                }
+                if (!current.isOk()) continue;
+
+                let value;
+                if (ui) {
+                    const bounds = await session.readBounds(field);
+                    if (!bounds.isOk() || !/^-?\d+$/.test(current.body)) continue;
+                    const [min, max] = bounds.body;
+                    value = scaleToRange(Number(current.body), min, max, ui[0], ui[1]);
+                } else {
+                    value = parseReadback(kind, current.body);
+                }
+                if (value !== null) values[control] = value;
+            }
+            return CameraResponse.ok(values);
+        });
+    }
+
+    /** Sets a boolean/enum field to text through a fresh session, then reads it back. */
+    runVerifiedSet(field, text) {
+        return this.withSession(async (session) => {
+            const set = await session.camCtl(`$${field}:=${text}`);
+            return set.isOk() ? session.verifySet(field, set, (actual) => sameText(actual, text)) : set;
+        });
     }
 
     /**
      * Queries the camera's own min/max for field ("$Irs:c" -> "$Irs:i0,20000"),
-     * scales uiValue into it, then sends the absolute set -- all in one session.
+     * scales uiValue into it, sends the absolute set, then reads it back -- all
+     * in one session. The read-back counts as applied when it maps to the same
+     * UI value, so a camera that rounds to its own step size still passes.
      */
-    runScaledCamCtlCommand(field, uiValue, uiMin, uiMax) {
+    runScaledCamCtlCommand(field, uiValue, uiMin, uiMax, { verify = true } = {}) {
         return this.withSession(async (session) => {
-            const bounds = await session.camCtl(`$${field}:c`);
+            const bounds = await session.readBounds(field);
             if (!bounds.isOk()) {
                 return bounds;
             }
+            const [min, max] = bounds.body;
 
-            const match = new RegExp(`\\$${field}:i(-?\\d+),(-?\\d+)`).exec(bounds.body);
-            if (!match) {
-                return CameraResponse.unexpected(bounds.body, `Could not parse ${field} bounds from camera response`);
+            const native = scaleToRange(uiValue, uiMin, uiMax, min, max);
+            const set = await session.camCtl(`$${field}:=${native}`);
+            if (!set.isOk() || !verify) {
+                return set;
             }
 
-            const native = scaleToRange(uiValue, uiMin, uiMax, Number(match[1]), Number(match[2]));
-            return session.camCtl(`$${field}:=${native}`);
+            const toUi = (n) => scaleToRange(n, min, max, uiMin, uiMax);
+            return session.verifySet(field, set, (actual) => /^-?\d+$/.test(actual) && toUi(Number(actual)) === toUi(native));
         });
     }
 
@@ -326,6 +402,43 @@ class ControlSession {
         }
 
         return CameraResponse.ok(text ?? raw);
+    }
+
+    /** "$X:?" -> on success the body is the value text after ":s" ("$Irs:s3363" -> "3363"). */
+    async readValue(field) {
+        const response = await this.camCtl(`$${field}:?`);
+        if (!response.isOk()) {
+            return response;
+        }
+        const prefix = `$${field}:s`;
+        return typeof response.body === 'string' && response.body.startsWith(prefix)
+            ? CameraResponse.ok(response.body.slice(prefix.length))
+            : CameraResponse.unexpected(response.body, `Could not parse ${field} value from camera response`);
+    }
+
+    /** "$X:c" -> on success the body is [min, max] ("$Irs:i0,20000" -> [0, 20000]). */
+    async readBounds(field) {
+        const response = await this.camCtl(`$${field}:c`);
+        if (!response.isOk()) {
+            return response;
+        }
+        const match = new RegExp(`\\$${field}:i(-?\\d+),(-?\\d+)`).exec(response.body);
+        return match
+            ? CameraResponse.ok([Number(match[1]), Number(match[2])])
+            : CameraResponse.unexpected(response.body, `Could not parse ${field} bounds from camera response`);
+    }
+
+    /**
+     * Reads field back after an acknowledged set. NOT_APPLIED if matches()
+     * rejects the camera's value; if the read itself fails, the set's own
+     * result stands, since the camera did acknowledge it.
+     */
+    async verifySet(field, setResponse, matches) {
+        const actual = await this.readValue(field);
+        if (!actual.isOk() || matches(actual.body)) {
+            return setResponse;
+        }
+        return CameraResponse.notApplied(actual.body, `Camera acknowledged ${field} but reads back ${actual.body}`);
     }
 
     /** Best-effort teardown; failures here are not surfaced to the caller. */

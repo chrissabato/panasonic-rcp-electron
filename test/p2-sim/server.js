@@ -26,6 +26,7 @@ function startP2Sim({
     },
     values = { Irs: '3363', AIrsSw: 'Off', AIrsLv: '0', RGain: '0', BGain: '-2', WBalSel: 'B', AFcSw: 'On', RTlySw: 'Off' },
     ignoredWrites = [],
+    steps = {}, // field -> step size the camera snaps written values to
     unsupported = [],
     busy = [],
     awbPollsBeforeSettle = 2,
@@ -89,7 +90,10 @@ function startP2Sim({
             if (rest.startsWith('=')) {
                 if (unsupported.includes(field)) return camCtl(`$${field}:!`, ' Msg="Not Supported"');
                 if (busy.includes(field)) return camCtl(`$${field}:#`);
-                if (!ignoredWrites.includes(field)) state[field] = rest.slice(1);
+                if (!ignoredWrites.includes(field)) {
+                    const value = rest.slice(1);
+                    state[field] = steps[field] ? String(Math.round(Number(value) / steps[field]) * steps[field]) : value;
+                }
                 return '<P2Control />';
             }
             return camCtl(`$${field}:!`, ' Msg="Not Supported"');

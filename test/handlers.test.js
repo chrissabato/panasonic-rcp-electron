@@ -30,9 +30,9 @@ async function setup(simOptions = {}) {
             connectTimeoutMs: timeouts.connect_ms, totalTimeoutMs: timeouts.total_ms,
         });
     };
-    const { handlers, checkHealth } = createHandlers({ store, queue: new CommandQueue(), clientFor, log: () => {} });
+    const { handlers, checkHealth, pollChannel } = createHandlers({ store, queue: new CommandQueue(), clientFor, log: () => {} });
     return {
-        sim, store, handlers, checkHealth,
+        sim, store, handlers, checkHealth, pollChannel,
         async teardown() {
             store.close();
             await sim.close();
@@ -162,6 +162,49 @@ test('scenes save, recall onto the camera and report per-channel results', async
         await rejectsWith(t.handlers.recallScene({ scene_id: 999 }), 'scene_not_found');
         t.handlers.deleteScene({ id: saved.id });
         assert.equal(t.handlers.listScenes().scenes.length, 0);
+    } finally {
+        await t.teardown();
+    }
+});
+
+test('an ignored write fails with not_applied and stores the camera\'s real value', async () => {
+    const t = await setup({ ignoredWrites: ['BGain'] });
+    try {
+        await rejectsWith(t.handlers.setControl({ channel: 1, control: 'wb_b', value: 90 }), 'not_applied');
+        assert.equal(t.store.getChannelState(1).wb_b, 40, 'BGain -2 of -10..10, not the 90 that was sent');
+        assert.equal(t.store.getHealth(1).status, 'ok');
+    } finally {
+        await t.teardown();
+    }
+});
+
+test('the slow poll probes health and stores values changed on the camera body', async () => {
+    const t = await setup();
+    try {
+        t.sim.state.Irs = '20000';
+        t.sim.state.AIrsSw = 'On';
+        t.sim.state.WBalSel = 'Preset';
+        await t.pollChannel(1);
+
+        const state = t.store.getChannelState(1);
+        assert.equal(state.iris, 100);
+        assert.equal(state.auto_iris, true);
+        assert.equal(state.awb_mode, 10);
+        assert.equal(t.store.getHealth(1).info.model, 'AG-CX370');
+
+        await t.pollChannel(2); // no IP: probed as unreachable, never read back
+        assert.equal(t.store.getHealth(2).status, 'unreachable');
+    } finally {
+        await t.teardown();
+    }
+});
+
+test('the slow poll skips read-back when login fails', async () => {
+    const t = await setup({ password: 'other' });
+    try {
+        await t.pollChannel(1);
+        assert.equal(t.store.getHealth(1).status, 'auth_failed');
+        assert.equal(t.sim.received.includes('$Irs:?'), false);
     } finally {
         await t.teardown();
     }

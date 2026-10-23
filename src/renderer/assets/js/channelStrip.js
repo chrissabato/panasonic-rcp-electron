@@ -223,8 +223,11 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
             await api.setControl(channelId, control, value);
             pendingUntil[control] = 0;
         } catch (err) {
-            // Leave the optimistic UI value in place; next poll/health-tick will
-            // reconcile once reachable again. Non-fatal by design.
+            // The camera kept its own value, and the main process has already
+            // stored it: drop the guard so the next fast poll snaps back to it.
+            if (err.code === 'not_applied') pendingUntil[control] = 0;
+            // Otherwise leave the optimistic UI value in place; the slow poll's
+            // read-back reconciles it once the camera is reachable. Non-fatal by design.
             console.warn(`CH${channelId} ${control} -> ${value} failed: ${err.message}`);
         }
     }

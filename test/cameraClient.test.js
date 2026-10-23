@@ -21,13 +21,59 @@ async function withSim(options, fn) {
     }
 }
 
-test('scaled set queries bounds, scales and sets in one session', () => withSim({}, async (sim) => {
+test('scaled set queries bounds, scales, sets and reads back in one session', () => withSim({}, async (sim) => {
     const response = await clientFor(sim).setIris(25);
     assert.equal(response.state, CameraState.OK);
     assert.equal(sim.state.Irs, '5000');
     assert.deepEqual(sim.received, [
-        'Login:admin', '$Connect:=On', '$MyName:sPanasonicRCP', '$Irs:c', '$Irs:=5000', '$Connect:=Off',
+        'Login:admin', '$Connect:=On', '$MyName:sPanasonicRCP', '$Irs:c', '$Irs:=5000', '$Irs:?', '$Connect:=Off',
     ]);
+}));
+
+test('an acknowledged but ignored write is reported as not applied', () => withSim({ ignoredWrites: ['RGain', 'AFcSw'] }, async (sim) => {
+    const client = clientFor(sim);
+    const gain = await client.setWbRedGain(100);
+    assert.equal(gain.state, CameraState.NOT_APPLIED);
+    assert.match(gain.error, /RGain.*reads back 0/);
+
+    const focus = await client.setAutoFocus(false);
+    assert.equal(focus.state, CameraState.NOT_APPLIED);
+}));
+
+test('a read-back that rounds to the same UI value still counts as applied', () => withSim({ steps: { Irs: 120 } }, async (sim) => {
+    assert.equal((await clientFor(sim).setIris(25)).state, CameraState.OK);
+    assert.equal(sim.state.Irs, '5040', 'the camera snapped 5000 to its own step');
+}));
+
+test('momentary speed commands are not read back', () => withSim({}, async (sim) => {
+    assert.ok((await clientFor(sim).setZoomSpeed(99)).isOk());
+    assert.equal(sim.received.includes('$ZmSpd:?'), false);
+}));
+
+test('readValues maps the camera\'s values onto UI controls', () => withSim({}, async (sim) => {
+    const response = await clientFor(sim).readValues();
+    assert.ok(response.isOk());
+    assert.deepEqual(response.body, {
+        iris: 17, // 3363 of 0..20000
+        iris_level: 0,
+        wb_r: 50, // 0 of -10..10
+        wb_b: 40, // -2 of -10..10
+        auto_iris: false,
+        auto_focus: true,
+        tally: false,
+        awb_mode: 2, // B
+    });
+}));
+
+test('readValues leaves out fields the camera rejects', () => withSim({ values: { Irs: '20000', WBalSel: 'Preset' } }, async (sim) => {
+    const response = await clientFor(sim).readValues();
+    assert.ok(response.isOk());
+    assert.deepEqual(response.body, { iris: 100, awb_mode: 10 });
+}));
+
+test('readValues reports a login failure', () => withSim({}, async (sim) => {
+    const response = await clientFor(sim, { password: 'nope' }).readValues();
+    assert.equal(response.state, CameraState.AUTH_FAILED);
 }));
 
 test('exposure compensation maps -50..50 onto $AIrsLv', () => withSim({}, async (sim) => {
