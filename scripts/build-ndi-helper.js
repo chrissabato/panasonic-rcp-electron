@@ -1,7 +1,8 @@
 // Builds native/ndi-helper as an x64 exe (NDI ships no Windows ARM64
 // library, so the helper runs under x64 emulation) and copies the NDI x64
-// runtime DLL next to it. Needs Visual Studio with the x64 C++ tools and the
-// NDI 6 SDK, found through the NDI_SDK_DIR variable its installer sets.
+// runtime DLL and its licenses file next to it. Needs Visual Studio with the
+// x64 C++ tools and the NDI 6 SDK, found through the NDI_SDK_DIR variable its
+// installer sets.
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -10,6 +11,8 @@ const ROOT = path.join(__dirname, '..');
 const SOURCE = path.join(ROOT, 'native', 'ndi-helper', 'ndi-helper.cpp');
 const OUT_DIR = path.join(ROOT, 'native', 'ndi-helper', 'build');
 const NDI_DLL = 'Processing.NDI.Lib.x64.dll';
+// "This file should be included with all distribution of the binary files included with the NDI SDK."
+const NDI_LICENSES = 'Processing.NDI.Lib.Licenses.txt';
 
 function fail(message) {
     console.error(`build-ndi-helper: ${message}`);
@@ -47,5 +50,7 @@ execFileSync('cmd.exe', ['/d', '/s', '/c', `"call "${vcvars}" ${hostTarget} >nul
     stdio: 'inherit', windowsVerbatimArguments: true,
 });
 
-fs.copyFileSync(path.join(sdk, 'Bin', 'x64', NDI_DLL), path.join(OUT_DIR, NDI_DLL));
+for (const file of [NDI_DLL, NDI_LICENSES]) {
+    fs.copyFileSync(path.join(sdk, 'Bin', 'x64', file), path.join(OUT_DIR, file));
+}
 console.log(`built ${path.join(OUT_DIR, 'ndi-helper.exe')}`);

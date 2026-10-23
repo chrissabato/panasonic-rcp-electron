@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld('rcp', {
     recallScene: invoke('recallScene'),
     getSettings: invoke('getSettings'),
     saveSettings: invoke('saveSettings'),
+    getAppInfo: invoke('getAppInfo'),
+    openExternal: invoke('openExternal'),
+    openNdiLicenses: invoke('openNdiLicenses'),
     // Asks for a port to the NDI process; it arrives as a window "message" event (see below).
     ndiConnect: () => ipcRenderer.send('ndi:connect'),
 });

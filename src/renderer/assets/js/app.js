@@ -2,6 +2,7 @@ import { createChannelStrip } from './channelStrip.js';
 import { startPoller } from './poller.js';
 import { initSceneManager } from './sceneManager.js';
 import { startNdiPreviews } from './ndiView.js';
+import { initAbout } from './about.js';
 import * as api from './api.js';
 
 const CHANNEL_IDS = [1, 2, 3, 4];
@@ -86,6 +87,8 @@ modalForm.addEventListener('submit', async (e) => {
         globalStatus.classList.add('error');
     }
 });
+
+initAbout();
 
 async function bootstrap() {
     let sceneManager = null;

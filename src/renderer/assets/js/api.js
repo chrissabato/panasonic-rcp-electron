@@ -57,3 +57,15 @@ export function getSettings() {
 export function saveSettings(payload) {
     return request('saveSettings', payload);
 }
+
+export function getAppInfo() {
+    return request('getAppInfo');
+}
+
+export function openExternal(url) {
+    return request('openExternal', { url });
+}
+
+export function openNdiLicenses() {
+    return request('openNdiLicenses');
+}

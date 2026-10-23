@@ -12,8 +12,11 @@
     <div class="header-actions">
         <div id="global-status" class="global-status" role="status" aria-live="polite"></div>
         <button type="button" id="preview-toggle-btn" class="nav-link-btn preview-toggle" aria-pressed="false" title="Start or stop the NDI previews on all strips">Start all previews</button>
+        <!-- NDI's licensing asks for a link to ndi.video near wherever NDI is used. -->
+        <a href="https://ndi.video/" data-external class="nav-link ndi-link" title="NDI® is a registered trademark of Vizrt NDI AB. Opens ndi.video">NDI®</a>
         <button type="button" id="link-all-btn" class="nav-link-btn" title="Link or unlink all four strips">Link all</button>
         <button type="button" id="scenes-open-btn" class="nav-link-btn">Scenes</button>
+        <button type="button" id="about-open-btn" class="nav-link-btn">About</button>
         <a href="settings.html" class="nav-link">Settings &rarr;</a>
     </div>
 </header>
@@ -58,6 +61,38 @@
                 <button type="submit">Save</button>
             </div>
         </form>
+    </div>
+</div>
+
+<div id="about-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-content about-content" role="dialog" aria-labelledby="about-title">
+        <div class="modal-header">
+            <h2 id="about-title">About</h2>
+            <button type="button" id="about-modal-close-btn" class="modal-close-btn" aria-label="Close">&times;</button>
+        </div>
+        <div class="about-app">
+            <img src="assets/img/app-icon.png" alt="" width="64" height="64">
+            <div>
+                <div class="about-name">AG-CX370 CCU</div>
+                <div class="about-version" id="about-version">Version &hellip;</div>
+            </div>
+        </div>
+        <p>Camera control panel for Panasonic AG-CX370 cameras, with live NDI&reg; previews.</p>
+
+        <section class="about-section">
+            <h3>NDI</h3>
+            <p>NDI&reg; is a registered trademark of Vizrt NDI AB.</p>
+            <p>NDI SDK &copy; 2023&ndash;2026 Vizrt NDI AB. All rights reserved.</p>
+            <p class="about-links">
+                <a href="https://ndi.video/" data-external>ndi.video</a>
+                <button type="button" id="about-ndi-licenses-btn" class="about-link-btn">NDI third-party licenses</button>
+            </p>
+            <p class="about-error" id="about-error" hidden></p>
+        </section>
+
+        <p class="about-fine">This app is not made, endorsed or supported by Panasonic or Vizrt NDI AB.
+            Panasonic and AG-CX370 are trademarks of their respective owners.</p>
+        <p class="about-fine" id="about-runtime"></p>
     </div>
 </div>
 

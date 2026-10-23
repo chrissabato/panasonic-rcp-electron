@@ -1,6 +1,7 @@
 // Renders build/icon.svg to build/icon.png (1024 px) and build/icon.ico (every
 // size Windows asks for, PNG-compressed), which electron-builder picks up from
-// build/ by default. Runs under Electron so Chromium does the rasterizing:
+// build/ by default, plus a 128 px copy for the About box (the renderer can
+// only load its own files). Runs under Electron so Chromium does the rasterizing:
 //   npm run build:icons
 const fs = require('node:fs');
 const path = require('node:path');
@@ -9,6 +10,8 @@ const { app, BrowserWindow } = require('electron');
 const BUILD = path.join(__dirname, '..', 'build');
 const ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256];
 const PNG_SIZE = 1024;
+const RENDERER_ICON = path.join(__dirname, '..', 'src', 'renderer', 'assets', 'img', 'app-icon.png');
+const RENDERER_ICON_SIZE = 128;
 
 /** Packs PNG images into an .ico: a 6-byte header, a 16-byte entry per image, then the PNG data. */
 function packIco(images) {
@@ -53,8 +56,10 @@ app.whenReady().then(async () => {
     const images = [];
     for (const size of ICO_SIZES) images.push({ size, png: await png(size) });
     fs.writeFileSync(path.join(BUILD, 'icon.ico'), packIco(images));
+    fs.mkdirSync(path.dirname(RENDERER_ICON), { recursive: true });
+    fs.writeFileSync(RENDERER_ICON, await png(RENDERER_ICON_SIZE));
 
-    console.log(`wrote build/icon.png (${PNG_SIZE} px) and build/icon.ico (${ICO_SIZES.join(', ')} px)`);
+    console.log(`wrote build/icon.png (${PNG_SIZE} px), build/icon.ico (${ICO_SIZES.join(', ')} px) and the About box icon`);
     app.quit();
 }).catch((err) => {
     console.error(err);

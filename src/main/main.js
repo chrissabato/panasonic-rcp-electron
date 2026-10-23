@@ -97,7 +97,8 @@ async function start() {
     const { registerIpc } = require('./ipc');
     const { HealthPoller } = require('./poller');
     const { createSecrets } = require('./secrets');
-    const { NdiHost } = require('./ndiHost');
+    const { NdiHost, helperPath } = require('./ndiHost');
+    const { createAppHandlers } = require('./appHandlers');
 
     const store = new StateStore(path.join(app.getPath('userData'), 'rcp.sqlite'), {
         defaultSettings: DEFAULT_SETTINGS,
@@ -127,7 +128,10 @@ async function start() {
         onSettingsChanged: () => poller?.restart(),
         onChannelConfigChanged: () => ndi.setChannels(store.getAllChannelConfigs()),
     });
-    registerIpc(handlers, { isTrustedSender: (frame) => isAppUrl(frame?.url) });
+    const appHandlers = createAppHandlers({
+        ndiLicensesPath: path.join(path.dirname(helperPath()), 'Processing.NDI.Lib.Licenses.txt'),
+    });
+    registerIpc({ ...handlers, ...appHandlers }, { isTrustedSender: (frame) => isAppUrl(frame?.url) });
 
     poller = new HealthPoller({ pollChannel, getIntervalMs: () => store.getSettings().poll.slow_ms });
     poller.start();

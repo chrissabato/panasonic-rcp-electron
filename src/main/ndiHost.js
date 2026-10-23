@@ -68,4 +68,4 @@ class NdiHost {
     }
 }
 
-module.exports = { NdiHost };
+module.exports = { NdiHost, helperPath };

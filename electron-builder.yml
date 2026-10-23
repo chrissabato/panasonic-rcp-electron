@@ -13,6 +13,7 @@ extraResources:
     filter:
       - ndi-helper.exe
       - Processing.NDI.Lib.x64.dll
+      - Processing.NDI.Lib.Licenses.txt
 # Native modules can't load from inside the asar archive.
 asarUnpack:
   - "**/*.node"
