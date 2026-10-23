@@ -8,7 +8,8 @@
     "start": "electron .",
     "test": "node scripts/run-tests.js",
     "postinstall": "electron-builder install-app-deps",
-    "dist": "electron-builder --win --arm64"
+    "dist": "electron-builder --win --arm64",
+    "build:ndi-helper": "node scripts/build-ndi-helper.js"
   },
   "dependencies": {
     "better-sqlite3": "13.0.3",

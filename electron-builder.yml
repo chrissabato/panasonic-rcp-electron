@@ -5,6 +5,14 @@ directories:
 files:
   - src/**/*
   - package.json
+# The x64 NDI helper and NDI's x64 DLL (run under emulation: NDI has no
+# Windows ARM64 library). Build them first with "npm run build:ndi-helper".
+extraResources:
+  - from: native/ndi-helper/build
+    to: ndi-helper
+    filter:
+      - ndi-helper.exe
+      - Processing.NDI.Lib.x64.dll
 # Native modules can't load from inside the asar archive.
 asarUnpack:
   - "**/*.node"

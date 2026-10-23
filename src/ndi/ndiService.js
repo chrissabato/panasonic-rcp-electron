@@ -6,9 +6,11 @@
  * If a frame falls due while a channel waits for its ack, it goes out as
  * soon as the ack arrives, so the ack round trip doesn't cost a whole tick.
  *
- * Frames are paced by due time, checked on a short timer, rather than by a
- * 1000/fps interval: Windows timers fire on a ~15.6 ms clock, which turns a
- * 33 ms interval into ~47 ms (21 fps).
+ * Pull sources (the fake one) are paced by due time, checked on a short
+ * timer, rather than by a 1000/fps interval: Windows timers fire on a
+ * ~15.6 ms clock, which turns a 33 ms interval into ~47 ms (21 fps).
+ * Push sources (the NDI helper, which paces itself) call frameReady() when
+ * a frame arrives, and it goes out at once if the renderer is ready.
  *
  * Messages to the renderer:
  *   { type: 'status', channel, status }   no_source | connecting | connected | no_signal
@@ -64,7 +66,10 @@ function createNdiService({ channelIds = [1, 2, 3, 4], fps = 30, now = Date.now,
         post({ type: 'status', channel, status });
     }
 
-    /** source: { width, height, stride, format, frameAt(t) }, or null for none. */
+    /**
+     * source: { width, height, stride, format, frameAt(t), push? }, or null
+     * for none. frameAt returns the pixel data, or null if there's no frame.
+     */
     function setSource(channel, source) {
         channels.get(channel).source = source;
     }
@@ -72,9 +77,11 @@ function createNdiService({ channelIds = [1, 2, 3, 4], fps = 30, now = Date.now,
     function send(channel, ch, t) {
         ch.missed = false;
         if (!port || ch.status !== 'connected' || !ch.source) return;
+        const data = ch.source.frameAt(t);
+        if (!data) return;
         const { width, height, stride, format } = ch.source;
         // postMessage copies the data as it serializes, so the source may reuse its buffer.
-        post({ type: 'frame', channel, width, height, stride, format, data: ch.source.frameAt(t) });
+        post({ type: 'frame', channel, width, height, stride, format, data });
         ch.credit = false;
         ch.sent++;
         // Next frame one period after this one was due; after a stall, restart from now rather than bursting to catch up.
@@ -85,10 +92,18 @@ function createNdiService({ channelIds = [1, 2, 3, 4], fps = 30, now = Date.now,
         if (!port) return;
         const t = now();
         for (const [channel, ch] of channels) {
-            if (t < ch.due) continue;
+            if (ch.source?.push || t < ch.due) continue;
             if (ch.credit) send(channel, ch, t);
             else ch.missed = true;
         }
+    }
+
+    /** A push source has a new frame: send it now, or as soon as the renderer acks the last one. */
+    function frameReady(channel) {
+        const ch = channels.get(channel);
+        if (!ch) return;
+        if (ch.credit) send(channel, ch, now());
+        else ch.missed = true;
     }
 
     return {
@@ -96,6 +111,7 @@ function createNdiService({ channelIds = [1, 2, 3, 4], fps = 30, now = Date.now,
         setStatus,
         setSource,
         tick,
+        frameReady,
         start() {
             timer ??= setInterval(tick, CHECK_INTERVAL_MS);
         },

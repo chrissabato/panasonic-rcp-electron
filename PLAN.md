@@ -42,7 +42,7 @@ The existing PHP app is the reference implementation. Its camera protocol behavi
 │    poller (health + read-back)                  │                   │
 │                                                 │                   │
 │  NDI utilityProcess (one per app)               │                   │
-│    native NDI SDK addon: find + 4 receivers ────┼──► cameras NDI|HX │
+│    ndi-helper.exe (x64, emulated): find + recv ─┼──► cameras NDI|HX │
 │    frames ── MessagePort (transferable) ────────┘                   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -53,7 +53,7 @@ Key decisions:
 - **IPC replaces HTTP.** Each `public/api/*.php` endpoint becomes one `ipcMain.handle` channel. Requests and responses keep the same shape (`{ok, data}` / `{ok:false, error, code}`), so `api.js` is the only frontend file that changes much.
 - **NDI runs in an Electron `utilityProcess`**, not the main process. Native decode work and crashes stay isolated from camera control, and the main process stays responsive.
 - **Frames go to the renderer over a `MessagePort`** as transferable `ArrayBuffer`s, which avoids copying through `ipcRenderer`. The renderer draws them with WebGL.
-- **Native arm64 throughout.** The main process, the utilityProcess and every `.node` addon (NDI, better-sqlite3) are win32-arm64. One process can't mix architectures: an x64 addon won't load into an arm64 Electron, even though Windows can emulate x64 apps with Prism.
+- **Native arm64, except NDI.** The main process, the utilityProcess and every `.node` addon (better-sqlite3) are win32-arm64. One process can't mix architectures: an x64 addon won't load into an arm64 Electron. NDI ships no Windows ARM64 library (see Phase 0.2), so NDI receiving runs in `ndi-helper.exe`, a small separate x64 program that Windows runs under its Prism emulation. The utilityProcess starts it and reads frames from its stdout.
 
 ---
 
@@ -100,7 +100,9 @@ Run every spike on the target hardware: a Windows ARM64 machine, using a native 
 
 1. **NDI and P2 together.** With the camera in NDI|HX mode, open NDI Studio Monitor (or any NDI viewer) on the camera. While it's streaming, run the PHP panel's controls and its health check. Confirm that both work at once and that P2 control doesn't stop the stream. *This blocks the whole plan.* **Answered 2026-10-23:** NDI streaming and P2 control work at the same time on the camera.
 2. **NDI on Windows ARM64.** The official C++ NDI SDK supports ARM natively, and the Windows ARM64 `.lib` and `.dll` binaries are available directly from NDI. Get them, and confirm that the arm64 DLL loads in an arm64 test program and can find a camera.
-3. **The native NDI addon.** Pick a Node binding for the NDI SDK and confirm all of the following:
+
+   **Answered 2026-10-23: there is no Windows ARM64 NDI library.** The NDI 6 SDK (6.3.2) for Windows ships x64 and x86 builds only, and NDI's docs and release notes mention ARM in general but never Windows on ARM. Chosen approach (option A): an x64 helper, `native/ndi-helper/ndi-helper.cpp`, built with `npm run build:ndi-helper` and run under emulation. It does NDI find, receive (lowest bandwidth) and frame sync, and writes frames to stdout.
+3. **The native NDI addon.** *Superseded by the x64 helper in 0.2; no Node addon is needed.* Measured on the dev machine with the AG-CX370: lowest bandwidth delivers 640×360 UYVY at the camera's 24 fps. The emulated helper uses 7% of one core for one receiver and 23% for four, decode included. Original checks: pick a Node binding for the NDI SDK and confirm all of the following:
    - It builds for arm64 against the pinned Electron (`@electron/rebuild --arch arm64`) with the MSVC ARM64 build tools.
    - It links against the arm64 NDI `.lib` and loads the arm64 DLL. Most community bindings bundle only x64 DLLs.
    - It can find sources and receive from a camera.
@@ -113,7 +115,7 @@ Run every spike on the target hardware: a Windows ARM64 machine, using a native 
 
    *Drawing side measured 2026-10-23 on the dev machine (win32-arm64, 12 cores), with generated frames instead of NDI, so no decode cost is included:* WebGL2 works. Four previews draw a steady 30 fps each. At 640×360 UYVY the whole app uses 34% of one core (2.9% of the machine). At 1920×1080 it uses 106% of one core (8.8%), mostly copying pixels through the renderer and the NDI process. Still to measure with the SDK: NDI|HX decode cost and end-to-end latency.
 
-Exit criteria: four previews render smoothly with P2 control active at the same time, on a Windows ARM64 machine running a native arm64 build.
+Exit criteria: four previews render smoothly with P2 control active at the same time, on a Windows ARM64 machine running a native arm64 build (with the x64 NDI helper, per 0.2).
 
 ### Phase 1: Scaffold
 
@@ -122,7 +124,7 @@ Exit criteria: four previews render smoothly with P2 control active at the same 
 - Copy `public/assets/` into `renderer/assets/`, and turn `index.php` and `settings.php` into static HTML. Any values that PHP injected into the pages now come from `rcp.getConfig()` instead.
 - Add native-module rebuilds for `better-sqlite3` and the NDI addon, targeting arm64.
 - Configure electron-builder with a `win` target of `nsis` and `arch: [arm64]`.
-- Set up the toolchain: VS 2022 with "MSVC ARM64 build tools" and the Windows SDK, plus Python for node-gyp.
+- Set up the toolchain: VS 2022 with "MSVC ARM64 build tools" and the Windows SDK, plus Python for node-gyp. *Done 2026-10-23 on the dev machine: Visual Studio 2026 Community (ARM64 and x64 C++ tools, Windows SDK 10.0.26100) and Python 3.13 ARM64; VS 2026 works with node-gyp. The x64 tools also build the NDI helper.*
 - Run CI on a native Windows ARM64 runner (for example GitHub's `windows-11-arm`), so native modules build and tests run on the real architecture. Cross-compiling from x64 is a fallback only.
 - On startup, log `process.arch` and fail with a clear message if a native module doesn't load, since that usually means an architecture mismatch.
 
@@ -161,9 +163,9 @@ The PHP panel shows the values the app last sent, so changes made on the camera 
 
 ### Phase 4: NDI previews
 
-*In progress.* Built and working with generated test frames (run with `RCP_FAKE_NDI=1`, or a size such as `RCP_FAKE_NDI=1920x1080`): the utilityProcess (`src/ndi/`), its MessagePort to the renderer, frame pacing, the WebGL2 UYVY/BGRA view per strip, and the status overlays. Without `RCP_FAKE_NDI`, every channel shows "No source". Still to do: the SDK receiver, discovery and channel matching, and the Settings dropdown.
+*Working with the real camera, 2026-10-23.* The utilityProcess (`src/ndi/`) starts `ndi-helper.exe`, and each channel shows the NDI source whose address is its camera's IP. The camera IPs are also given to the helper for direct discovery, so a firewall blocking mDNS can't hide them. Frames go over a MessagePort to a WebGL2 UYVY/BGRA view in each strip, with status overlays. With the AG-CX370 on CH1, the whole app uses about 2% of the machine. `RCP_FAKE_NDI=1` (or a size such as `1920x1080`) still swaps in generated test frames. Still to do: the per-channel source dropdown in Settings, and the optional NDI tally.
 
-- **Runtime:** load the arm64 NDI runtime DLL bundled in the app's `resources/`. Don't rely on a system-installed NDI Runtime, which may be x64.
+- **Runtime:** ~~load the arm64 NDI runtime DLL bundled in the app's `resources/`~~. There is no arm64 runtime, so the build copies the x64 `Processing.NDI.Lib.x64.dll` next to `ndi-helper.exe`, and both ship in `resources/ndi-helper/`. Don't rely on a system-installed NDI Runtime.
 - **Discovery:** use NDI find in the utilityProcess, and match each source to a channel. The default match is the source name containing the camera's IP or display name. Add a per-channel "NDI source" dropdown in Settings to override it.
 - **Receivers:** one per channel, set to lowest bandwidth. Use the SDK's framesync so the renderer always pulls the latest frame and never builds a backlog. Cap the preview at about 30 fps.
 - **Transport:** send each frame over a `MessagePort`, with width, height, stride and pixel format (UYVY or BGRA). Between processes the data is always copied when it's sent; a transfer list can't avoid that, and Electron's `MessagePortMain` only transfers ports anyway. The renderer acks each drawn frame, and a channel's next frame waits for that ack, so a slow renderer drops frames instead of queueing them.
@@ -175,7 +177,7 @@ The PHP panel shows the values the app last sent, so changes made on the camera 
 ### Phase 5: Packaging
 
 - Build the win32-arm64 NSIS installer with electron-builder and sign it with Authenticode (for example Azure Trusted Signing or an EV certificate).
-- Bundle the **arm64** NDI runtime as the SDK's license requires, and include the required NDI trademark and license notices in an About box.
+- Bundle the NDI runtime (the **x64** DLL, beside `ndi-helper.exe`; `electron-builder.yml` already includes both) as the SDK's license requires, and include the required NDI trademark and license notices in an About box.
 - Auto-update is optional, and only worth it if more than one or two machines will run the app. If it's added, publish an arm64-specific update feed.
 - Later, if needed: Windows x64 and macOS builds. macOS would also need notarization.
 
@@ -222,7 +224,7 @@ Tested against an AG-CX370, serial DV24782369EC48, on 2026-10-22 and 2026-10-23.
 ## Open questions
 
 1. ~~Can NDI|HX streaming and P2 control run at the same time (Phase 0.1)?~~ Yes, confirmed on the camera on 2026-10-23.
-2. Which NDI binding to use, or whether to write a custom addon (Phase 0.3)?
+2. ~~Which NDI binding to use, or whether to write a custom addon (Phase 0.3)?~~ Neither: there's no Windows ARM64 NDI library, so an x64 helper runs under emulation (Phase 0.2).
 3. Which ARM64 device is the reference test machine?
 4. Should the panel's tally also drive NDI tally?
 5. Should the PHP app be kept as a fallback, or retired once the Electron app ships?

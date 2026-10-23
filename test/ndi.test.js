@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { createFakeSource, rgbToYuv709 } = require('../src/ndi/fakeSource');
 const { createNdiService } = require('../src/ndi/ndiService');
+const { createMessageReader } = require('../src/ndi/helperProtocol');
+const { matchSources } = require('../src/ndi/ndiHelper');
 
 /** Stands in for a MessagePortMain: records what's posted, lets a test send messages in. */
 function fakePort() {
@@ -123,4 +125,80 @@ test('no port, no source or a bad status sends nothing', () => {
     service.tick(); // no source
     assert.equal(port.frames().length, 0);
     assert.throws(() => service.setStatus(1, 'bogus'), RangeError);
+});
+
+/** Encodes messages the way ndi-helper.exe writes them. */
+function helperMessage(type, payload) {
+    const prefix = Buffer.alloc(8);
+    prefix.writeUInt32LE(type, 0);
+    prefix.writeUInt32LE(payload.length, 4);
+    return Buffer.concat([prefix, payload]);
+}
+
+function helperFrame(channel, width, height, fill) {
+    const header = Buffer.alloc(20);
+    [channel, Buffer.from('UYVY').readUInt32LE(0), width, height, width * 2].forEach((v, i) => header.writeUInt32LE(v, i * 4));
+    return helperMessage(2, Buffer.concat([header, Buffer.alloc(width * 2 * height, fill)]));
+}
+
+test('helper output is parsed however the pipe splits it', () => {
+    const stream = Buffer.concat([
+        helperMessage(1, Buffer.from(JSON.stringify({ type: 'sources', sources: [{ name: 'Cam (A)', url: '10.0.0.5:5961' }] }))),
+        helperFrame(3, 64, 36, 7),
+        helperMessage(1, Buffer.from(JSON.stringify({ type: 'status', channel: 3, status: 'connected' }))),
+    ]);
+
+    for (const chunkSize of [1, 7, 4096, stream.length]) {
+        const messages = [];
+        const push = createMessageReader((m) => messages.push(m));
+        for (let i = 0; i < stream.length; i += chunkSize) push(stream.subarray(i, i + chunkSize));
+
+        assert.equal(messages.length, 3, `chunk size ${chunkSize}`);
+        assert.equal(messages[0].value.sources[0].name, 'Cam (A)');
+        const frame = messages[1];
+        assert.deepEqual([frame.channel, frame.format, frame.width, frame.height, frame.stride], [3, 'UYVY', 64, 36, 128]);
+        assert.equal(frame.data.length, 128 * 36);
+        assert.ok(frame.data.every((b) => b === 7));
+        assert.equal(messages[2].value.status, 'connected');
+    }
+});
+
+test('each channel takes the NDI source at its camera IP', () => {
+    const sources = [
+        { name: 'AG-CX370 (AG-CX370_F6TCA0040)', url: '192.168.4.40:5961' },
+        { name: 'WU-218373 (vMix - Output 1)', url: '192.168.4.100:5961' },
+    ];
+    assert.deepEqual(matchSources({
+        1: { ip_address: '192.168.4.40' },
+        2: { ip_address: '192.168.4.4' }, // a prefix of .40 must not match
+        3: { ip_address: '' },
+    }, sources), { 1: 'AG-CX370 (AG-CX370_F6TCA0040)', 2: null, 3: null });
+});
+
+test('push sources send on arrival, never on the timer, and never a frame twice', () => {
+    const service = createNdiService({ channelIds: [1], now: () => 0 });
+    let latest = null;
+    service.setSource(1, {
+        push: true, width: 64, height: 36, stride: 128, format: 'UYVY',
+        frameAt: () => { const f = latest; latest = null; return f; },
+    });
+    service.setStatus(1, 'connected');
+    const port = fakePort();
+    service.attach(port);
+
+    service.tick();
+    assert.equal(port.frames().length, 0, 'the timer never sends a push source');
+
+    latest = Buffer.alloc(128 * 36);
+    service.frameReady(1);
+    assert.equal(port.frames().length, 1, 'sent on arrival');
+
+    latest = Buffer.alloc(128 * 36);
+    service.frameReady(1); // renderer hasn't acked yet
+    assert.equal(port.frames().length, 1);
+    port.receive({ type: 'ack', channel: 1 });
+    assert.equal(port.frames().length, 2, 'sent on the ack');
+
+    port.receive({ type: 'ack', channel: 1 });
+    assert.equal(port.frames().length, 2, 'nothing new, nothing sent');
 });

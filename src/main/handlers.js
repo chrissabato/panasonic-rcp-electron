@@ -42,6 +42,7 @@ const FAILURE_CODES = {
  *   queue     CommandQueue (one job at a time per camera)
  *   clientFor (channelId) => CameraClient built from the current config
  *   log       (message) => void
+ * and optionally the hooks onSettingsChanged and onChannelConfigChanged.
  */
 function createHandlers(ctx) {
     const { store, queue, clientFor, log = console.warn } = ctx;
@@ -206,6 +207,7 @@ function createHandlers(ctx) {
             username: body.username !== undefined ? String(body.username).trim() : current.username,
             password: body.password !== undefined ? String(body.password) : current.password,
         });
+        ctx.onChannelConfigChanged?.();
 
         // Re-check now so the UI reflects the new address without waiting for the slow poll.
         const health = await checkHealth(channelId);
@@ -359,6 +361,7 @@ function createHandlers(ctx) {
         }
 
         ctx.onSettingsChanged?.();
+        if (Object.keys(channelUpdates).length > 0) ctx.onChannelConfigChanged?.();
         return settingsPayload();
     }
 

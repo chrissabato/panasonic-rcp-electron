@@ -117,18 +117,20 @@ async function start() {
     };
 
     let poller = null;
+    const ndi = new NdiHost();
     const { handlers, pollChannel } = createHandlers({
         store,
         queue: new CommandQueue(),
         clientFor,
         onSettingsChanged: () => poller?.restart(),
+        onChannelConfigChanged: () => ndi.setChannels(store.getAllChannelConfigs()),
     });
     registerIpc(handlers, { isTrustedSender: (frame) => isAppUrl(frame?.url) });
 
     poller = new HealthPoller({ pollChannel, getIntervalMs: () => store.getSettings().poll.slow_ms });
     poller.start();
 
-    const ndi = new NdiHost();
+    ndi.setChannels(store.getAllChannelConfigs());
     ndi.start();
     ipcMain.on('ndi:connect', (event) => {
         if (isAppUrl(event.senderFrame?.url)) ndi.connect(event.sender);
