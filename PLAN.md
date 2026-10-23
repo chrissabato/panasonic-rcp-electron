@@ -98,7 +98,7 @@ panasonic-rcp-electron/
 
 Run every spike on the target hardware: a Windows ARM64 machine, using a native arm64 Electron build.
 
-1. **NDI and P2 together.** With the camera in NDI|HX mode, open NDI Studio Monitor (or any NDI viewer) on the camera. While it's streaming, run the PHP panel's controls and its health check. Confirm that both work at once and that P2 control doesn't stop the stream. *This blocks the whole plan.*
+1. **NDI and P2 together.** With the camera in NDI|HX mode, open NDI Studio Monitor (or any NDI viewer) on the camera. While it's streaming, run the PHP panel's controls and its health check. Confirm that both work at once and that P2 control doesn't stop the stream. *This blocks the whole plan.* **Answered 2026-10-23:** NDI streaming and P2 control work at the same time on the camera.
 2. **NDI on Windows ARM64.** The official C++ NDI SDK supports ARM natively, and the Windows ARM64 `.lib` and `.dll` binaries are available directly from NDI. Get them, and confirm that the arm64 DLL loads in an arm64 test program and can find a camera.
 3. **The native NDI addon.** Pick a Node binding for the NDI SDK and confirm all of the following:
    - It builds for arm64 against the pinned Electron (`@electron/rebuild --arch arm64`) with the MSVC ARM64 build tools.
@@ -216,7 +216,7 @@ Tested against an AG-CX370, serial DV24782369EC48, on 2026-10-22 and 2026-10-23.
 
 ## Open questions
 
-1. Can NDI|HX streaming and P2 control run at the same time (Phase 0.1)?
+1. ~~Can NDI|HX streaming and P2 control run at the same time (Phase 0.1)?~~ Yes, confirmed on the camera on 2026-10-23.
 2. Which NDI binding to use, or whether to write a custom addon (Phase 0.3)?
 3. Which ARM64 device is the reference test machine?
 4. Should the panel's tally also drive NDI tally?
