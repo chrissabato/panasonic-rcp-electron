@@ -1,5 +1,7 @@
 // Protocol-agnostic 2D pad widget (R/B paint style). Pointer position maps
-// absolutely onto x/y; arrow keys nudge by 1; double-click recenters. Knows
+// absolutely onto x/y; with Shift held the puck moves relatively at a fifth
+// of the speed, for fine trims. Arrow keys nudge by 1; double-click
+// recenters. Values read as offsets from center ("R +3 · B -1"). Knows
 // nothing about cameras -- just reports which axis values changed.
 export function createXyPad({
     min = 0, max = 100, x = 50, y = 50, xLabel = 'X', yLabel = 'Y', onChange,
@@ -34,7 +36,9 @@ export function createXyPad({
         const span = max - min || 1;
         area.style.setProperty('--x', String((cx - min) / span));
         area.style.setProperty('--y', String((cy - min) / span));
-        readout.textContent = `${yLabel} ${cy} · ${xLabel} ${cx}`;
+        const offset = (v) => (v > center ? `+${v - center}` : v < center ? `−${center - v}` : '+0');
+        readout.textContent = `${yLabel} ${offset(cy)} · ${xLabel} ${offset(cx)}`;
+        area.title = 'Drag to paint; hold Shift for fine control; double-click to reset to center';
     }
 
     // Reports only the axes that actually changed, so a purely horizontal drag
@@ -60,17 +64,33 @@ export function createXyPad({
         return [min + px * (max - min), min + py * (max - min)];
     }
 
+    const FINE = 0.2;
     let dragging = false;
+    let last = null; // last pointer position and exact values, for Shift's relative moves
 
     area.addEventListener('pointerdown', (e) => {
         dragging = true;
         area.setPointerCapture(e.pointerId);
-        moveTo(...valuesFromPointer(e), false);
+        // With Shift, a press doesn't jump the puck to the pointer: fine trims start from where it is.
+        if (!e.shiftKey) moveTo(...valuesFromPointer(e), false);
+        last = { px: e.clientX, py: e.clientY, x: cx, y: cy };
     });
 
     area.addEventListener('pointermove', (e) => {
         if (!dragging) return;
-        moveTo(...valuesFromPointer(e), false);
+        if (e.shiftKey) {
+            const rect = area.getBoundingClientRect();
+            const span = max - min;
+            last.x = Math.min(max, Math.max(min, last.x + ((e.clientX - last.px) / rect.width) * span * FINE));
+            last.y = Math.min(max, Math.max(min, last.y - ((e.clientY - last.py) / rect.height) * span * FINE));
+            moveTo(last.x, last.y, false);
+        } else {
+            moveTo(...valuesFromPointer(e), false);
+            last.x = cx;
+            last.y = cy;
+        }
+        last.px = e.clientX;
+        last.py = e.clientY;
     });
 
     // On release, re-report both axes as final so the last throttled value

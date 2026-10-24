@@ -14,16 +14,21 @@ const DRAG_THROTTLE_MS = 120;
  * "pending" guard stops a stale poll from clobbering a value the user just
  * dragged before the set's reply (or next poll) confirms it.
  *
- * Linking: every change the user makes here is reported through
- * onLocalChange, and app.js replays it on the other linked strips with
+ * Ganging: every change the user makes here is reported through
+ * onLocalChange, and app.js replays it on the other ganged strips with
  * mirror(), which runs the same path minus the report, so it never echoes.
+ *
+ * Locking: a locked strip sends nothing to its camera -- not from its own
+ * controls, not from a ganged strip -- so a stray click can't move a camera
+ * that's on air. Polls still update it, so it keeps showing the real values.
  */
-export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecall, onLocalChange, onLinkToggle } = {}) {
+export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecall, onLocalChange, onLinkToggle, onLockToggle } = {}) {
     const widgets = {};
     const pendingUntil = {};
     const lastSentAt = {};
     const els = {};
     const preview = createNdiView();
+    let locked = false;
 
     function init(schema, channelData) {
         root.innerHTML = '';
@@ -46,13 +51,25 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
 
         els.link = document.createElement('button');
         els.link.type = 'button';
-        els.link.className = 'strip-link';
-        els.link.textContent = 'LINK';
-        els.link.title = 'Link this strip: changes on any linked strip apply to all linked strips';
+        els.link.className = 'strip-pill';
+        els.link.textContent = 'GANG';
+        els.link.title = 'Gang this strip: a change on any ganged strip applies to all ganged strips';
         els.link.setAttribute('aria-pressed', 'false');
         els.link.addEventListener('click', () => onLinkToggle?.(channelId));
 
-        header.append(title, els.link, els.ip);
+        els.lock = document.createElement('button');
+        els.lock.type = 'button';
+        els.lock.className = 'strip-pill strip-lock';
+        els.lock.textContent = 'LOCK';
+        els.lock.title = 'Lock this strip so nothing can change its camera';
+        els.lock.setAttribute('aria-pressed', 'false');
+        els.lock.addEventListener('click', () => onLockToggle?.(channelId));
+
+        const pills = document.createElement('div');
+        pills.className = 'strip-pills';
+        pills.append(els.link, els.lock);
+
+        header.append(title, pills, els.ip);
 
         els.healthNote = document.createElement('div');
         els.healthNote.className = 'health-note';
@@ -65,8 +82,15 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
             widgets.tally.setValue(next);
             handleChange('tally', next, true);
         });
+        // Tally is a state: grey when off; when on, the lamp goes bright red and
+        // the whole strip glows red, so it reads from across the room.
         widgets.tally = {
-            setValue: (v) => { els.tally.classList.toggle('on', !!v); widgets.tally._v = !!v; },
+            setValue: (v) => {
+                els.tally.classList.toggle('on', !!v);
+                els.tally.textContent = v ? 'ON AIR' : 'TALLY';
+                root.classList.toggle('on-air', !!v);
+                widgets.tally._v = !!v;
+            },
             getValue: () => !!widgets.tally._v,
         };
 
@@ -218,6 +242,7 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         button.className = 'control-button';
         button.textContent = 'Trigger';
         button.addEventListener('click', async () => {
+            if (locked) return;
             button.disabled = true;
             onLocalChange?.(channelId, control, true, true);
             try {
@@ -238,12 +263,16 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
 
     /** A change made on this strip: apply it, and report it so linked strips follow. */
     function handleChange(control, value, final) {
+        // Locked: drop it. The widget may already show the new value (a key
+        // press, say); the next fast poll puts back the camera's value.
+        if (locked) return;
         applyChange(control, value, final);
         onLocalChange?.(channelId, control, value, final);
     }
 
     /** A change made on a linked strip: show it here and send it to this camera too. */
     function mirror(control, value, final) {
+        if (locked) return;
         if (control === 'trigger_awb') {
             send(control, true);
             return;
@@ -256,6 +285,15 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         root.classList.toggle('linked', on);
         els.link.classList.toggle('on', on);
         els.link.setAttribute('aria-pressed', String(on));
+    }
+
+    function setLocked(on) {
+        locked = on;
+        root.classList.toggle('locked', on);
+        els.lock.classList.toggle('on', on);
+        els.lock.textContent = on ? 'LOCKED' : 'LOCK';
+        els.lock.title = on ? 'Unlock this strip' : 'Lock this strip so nothing can change its camera';
+        els.lock.setAttribute('aria-pressed', String(on));
     }
 
     function applyChange(control, value, final) {
@@ -298,14 +336,18 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
     }
 
     // status is a CameraState from the main process: ok, unreachable,
-    // auth_failed or unexpected (null until the first probe).
+    // auth_failed or unexpected (null until the first probe). The note always
+    // says the connection state in words, beside the dot's colour.
     function updateHealth(health) {
         if (!health) return;
         els.dot.classList.remove('ok', 'amber', 'offline');
-        let note = '';
+        els.healthNote.classList.remove('ok');
+        let note = 'Connecting…';
         let amber = false;
         if (health.status === 'ok') {
             els.dot.classList.add('ok');
+            els.healthNote.classList.add('ok');
+            note = 'Connected';
         } else if (health.status === 'auth_failed') {
             amber = true;
             note = 'Login failed: check user/password';
@@ -314,7 +356,7 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
             note = 'Unexpected camera response';
         } else if (health.status === 'unreachable') {
             els.dot.classList.add('offline');
-            note = health.last_error === 'No IP address set' ? 'No IP address set' : 'Camera unreachable';
+            note = health.last_error === 'No IP address set' ? 'No IP address set' : 'Offline';
         }
         if (amber) els.dot.classList.add('amber');
         els.dot.title = health.info ? [health.info.model, health.info.serial].filter(Boolean).join(' · ') : '';
@@ -323,5 +365,5 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         root.classList.toggle('offline', health.status === 'unreachable');
     }
 
-    return { init, update, updateHealth, preview, mirror, setLinked };
+    return { init, update, updateHealth, preview, mirror, setLinked, setLocked };
 }

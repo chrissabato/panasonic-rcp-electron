@@ -8,16 +8,19 @@ import * as api from './api.js';
 const CHANNEL_IDS = [1, 2, 3, 4];
 const strips = {};
 const LINKED_KEY = 'rcp.linkedChannels';
+const LOCKED_KEY = 'rcp.lockedChannels';
 
-// Linked strips move together: a change on one is replayed on the others.
-// Remembered per machine; a missing or blocked localStorage just starts unlinked.
-const linked = new Set(loadLinked());
+// Ganged ("linked") strips move together: a change on one is replayed on the
+// others. Locked strips send nothing to their camera. Both are remembered per
+// machine; a missing or blocked localStorage just starts with none.
+const linked = new Set(loadChannelSet(LINKED_KEY));
+const locked = new Set(loadChannelSet(LOCKED_KEY));
 const linkAllBtn = document.getElementById('link-all-btn');
 const previewToggleBtn = document.getElementById('preview-toggle-btn');
 
-function loadLinked() {
+function loadChannelSet(key) {
     try {
-        const ids = JSON.parse(localStorage.getItem(LINKED_KEY) ?? '[]');
+        const ids = JSON.parse(localStorage.getItem(key) ?? '[]');
         return Array.isArray(ids) ? ids.filter((id) => CHANNEL_IDS.includes(id)) : [];
     } catch {
         return [];
@@ -26,10 +29,26 @@ function loadLinked() {
 
 function showLinked() {
     for (const id of CHANNEL_IDS) strips[id]?.setLinked(linked.has(id));
-    linkAllBtn.textContent = linked.size === CHANNEL_IDS.length ? 'Unlink all' : 'Link all';
+    linkAllBtn.textContent = linked.size === CHANNEL_IDS.length ? 'Ungang all' : 'Gang all';
+    linkAllBtn.classList.toggle('on', linked.size === CHANNEL_IDS.length);
+    saveChannelSet(LINKED_KEY, linked);
+}
+
+function showLocked() {
+    for (const id of CHANNEL_IDS) strips[id]?.setLocked(locked.has(id));
+    saveChannelSet(LOCKED_KEY, locked);
+}
+
+function saveChannelSet(key, set) {
     try {
-        localStorage.setItem(LINKED_KEY, JSON.stringify([...linked]));
+        localStorage.setItem(key, JSON.stringify([...set]));
     } catch { /* not remembered; still works for this session */ }
+}
+
+function toggleLocked(channelId) {
+    if (locked.has(channelId)) locked.delete(channelId);
+    else locked.add(channelId);
+    showLocked();
 }
 
 function toggleLinked(channelId) {
@@ -103,13 +122,15 @@ async function bootstrap() {
                 onQuickRecall: (id) => sceneManager?.recallLastOnChannel(id),
                 onLocalChange: replayOnLinked,
                 onLinkToggle: toggleLinked,
+                onLockToggle: toggleLocked,
             });
             strip.init(data.controls, data.channels[channelId]);
             strips[channelId] = strip;
         }
 
         showLinked();
-        sceneManager = initSceneManager();
+        showLocked();
+        sceneManager = initSceneManager({ isLocked: (id) => locked.has(id) });
         // Previews start stopped each launch: no NDI video is pulled until the
         // operator starts one (its own corner button) or all (this header button).
         const previews = startNdiPreviews(Object.fromEntries(CHANNEL_IDS.map((id) => [id, strips[id].preview])));

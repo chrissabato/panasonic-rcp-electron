@@ -1,5 +1,7 @@
-// Protocol-agnostic rotary knob widget. Vertical drag changes value; arrow keys
-// nudge by 1. Knows nothing about cameras -- just reports value changes.
+// Protocol-agnostic rotary knob widget. Vertical drag changes value (hold
+// Shift for fine control); arrow keys nudge by 1. A knob whose range goes
+// below zero shows its sign ("+3"). Knows nothing about cameras -- just
+// reports value changes.
 export function createKnob({ min = 0, max = 100, value = 50, onChange } = {}) {
     const wrap = document.createElement('div');
     wrap.className = 'knob';
@@ -17,7 +19,8 @@ export function createKnob({ min = 0, max = 100, value = 50, onChange } = {}) {
     wrap.append(dial, valueLabel);
 
     let current = clamp(value);
-    const SENSITIVITY = (max - min) / 160; // px of drag for full range
+    const SENSITIVITY = (max - min) / 160; // full range over 160 px of drag
+    const FINE = 0.2; // with Shift held
 
     function clamp(v) {
         return Math.min(max, Math.max(min, Math.round(v)));
@@ -28,7 +31,7 @@ export function createKnob({ min = 0, max = 100, value = 50, onChange } = {}) {
         const angle = -135 + pct * 270;
         dial.style.setProperty('--angle', angle.toFixed(1));
         dial.setAttribute('aria-valuenow', String(current));
-        valueLabel.textContent = String(current);
+        valueLabel.textContent = min < 0 && current > 0 ? `+${current}` : String(current);
     }
 
     function setValue(v) {
@@ -36,21 +39,26 @@ export function createKnob({ min = 0, max = 100, value = 50, onChange } = {}) {
         render();
     }
 
+    // Drag is accumulated per move (not from the start point), so pressing or
+    // releasing Shift mid-drag changes the rate without jumping the value.
     let dragging = false;
-    let startY = 0;
-    let startValue = 0;
+    let lastY = 0;
+    let exact = 0;
 
     dial.addEventListener('pointerdown', (e) => {
         dragging = true;
-        startY = e.clientY;
-        startValue = current;
+        lastY = e.clientY;
+        exact = current;
         dial.setPointerCapture(e.pointerId);
     });
 
     dial.addEventListener('pointermove', (e) => {
         if (!dragging) return;
-        const deltaY = startY - e.clientY;
-        current = clamp(startValue + deltaY * SENSITIVITY);
+        exact = Math.min(max, Math.max(min, exact + (lastY - e.clientY) * SENSITIVITY * (e.shiftKey ? FINE : 1)));
+        lastY = e.clientY;
+        const next = clamp(exact);
+        if (next === current) return;
+        current = next;
         render();
         onChange?.(current, { final: false });
     });

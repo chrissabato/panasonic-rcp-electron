@@ -1,6 +1,7 @@
 import * as api from './api.js';
 
-export function initSceneManager() {
+/** isLocked(channelId): locked channels are left out of every recall. */
+export function initSceneManager({ isLocked = () => false } = {}) {
     const listEl = document.getElementById('scene-list');
     const nameInput = document.getElementById('scene-name-input');
     const scopeSelect = document.getElementById('scene-scope-select');
@@ -74,13 +75,22 @@ export function initSceneManager() {
     }
 
     async function doRecall(sceneId, channel) {
+        const channels = channel === 'all' ? [1, 2, 3, 4] : [channel];
+        const open = channels.filter((id) => !isLocked(id));
+        const results = Object.fromEntries(channels.filter(isLocked).map((id) => [id, { locked: true }]));
         try {
-            const result = await api.recallScene(sceneId, channel);
+            // With nothing locked, one call does every channel; otherwise recall the unlocked ones one by one.
+            if (channel === 'all' && open.length === channels.length) {
+                Object.assign(results, (await api.recallScene(sceneId, 'all')).results);
+            } else {
+                const replies = await Promise.all(open.map((id) => api.recallScene(sceneId, id)));
+                for (const reply of replies) Object.assign(results, reply.results);
+            }
             lastRecalledSceneId = sceneId;
-            showResult(result.results);
         } catch (err) {
             console.warn('Recall failed:', err.message);
         }
+        showResult(results);
     }
 
     function showResult(results) {
@@ -91,6 +101,7 @@ export function initSceneManager() {
             managerEl.append(resultEl);
         }
         const parts = Object.entries(results).map(([channelId, r]) => {
+            if (r.locked) return `CH${channelId}: locked, not recalled`;
             const bits = [];
             if (r.applied.length) bits.push(`${r.applied.length} applied`);
             if (r.failed.length) bits.push(`${r.failed.length} failed`);

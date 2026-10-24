@@ -21,9 +21,17 @@ export function createRocker({ min = 1, max = 99, center = 50, leftLabel = '', r
     track.setAttribute('aria-valuemax', String(max));
     track.setAttribute('aria-valuenow', String(center));
 
+    // Chevrons at each end light up with the push, so it reads as a speed
+    // control that springs back, not a position slider.
+    const backArrow = document.createElement('span');
+    backArrow.className = 'rocker-arrow back';
+    backArrow.textContent = '‹‹';
+    const fwdArrow = document.createElement('span');
+    fwdArrow.className = 'rocker-arrow fwd';
+    fwdArrow.textContent = '››';
     const handle = document.createElement('div');
     handle.className = 'rocker-handle';
-    track.append(handle);
+    track.append(backArrow, fwdArrow, handle);
     wrap.append(track);
 
     if (rightLabel) {
@@ -38,6 +46,8 @@ export function createRocker({ min = 1, max = 99, center = 50, leftLabel = '', r
 
     function render(offsetPct) {
         track.style.setProperty('--offset', String(offsetPct));
+        backArrow.style.setProperty('--push', String(Math.max(0, -offsetPct)));
+        fwdArrow.style.setProperty('--push', String(Math.max(0, offsetPct)));
     }
 
     function speedFromOffsetPct(pct) {

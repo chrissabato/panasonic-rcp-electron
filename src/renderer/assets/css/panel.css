@@ -11,7 +11,6 @@
     --amber: #e6a93a;
     --red: #e0473f;
     --gray: #5b616a;
-    --tally-off: #3a2224;
     --tally-on: #e0473f;
 }
 
@@ -54,10 +53,16 @@ body:has(> .strips) {
     cursor: pointer;
 }
 .nav-link-btn:hover { color: var(--accent); }
-.preview-toggle {
-    border: 1px solid var(--border); border-radius: 4px; padding: 3px 10px;
+.header-btn {
+    background: none;
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 4px 10px;
+    color: var(--text-dim); font: inherit; font-size: 12px;
+    text-decoration: none;
+    cursor: pointer;
 }
-.preview-toggle.on { color: var(--accent); border-color: var(--accent); background: rgba(61,139,253,0.15); }
+.header-btn:hover { color: var(--text); border-color: var(--accent); }
+.header-btn.on { color: var(--accent); border-color: var(--accent); background: rgba(61,139,253,0.15); }
 
 .settings-page { max-width: 900px; margin: 0 auto; padding: 18px; display: flex; flex-direction: column; gap: 18px; }
 .settings-section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
@@ -127,7 +132,8 @@ body:has(> .strips) {
 .strip-header { display: flex; align-items: center; justify-content: space-between; }
 .strip-title { display: flex; align-items: center; gap: 6px; font-weight: 700; }
 .strip-ip { font-size: 11px; color: var(--text-dim); cursor: pointer; }
-.strip-link {
+.strip-pills { display: flex; gap: 6px; }
+.strip-pill {
     background: none;
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -136,9 +142,18 @@ body:has(> .strips) {
     padding: 2px 8px;
     cursor: pointer;
 }
-.strip-link:hover { color: var(--text); border-color: var(--accent); }
-.strip-link.on { background: rgba(61,139,253,0.2); border-color: var(--accent); color: var(--accent); }
+.strip-pill:hover { color: var(--text); border-color: var(--accent); }
+.strip-pill.on { background: rgba(61,139,253,0.2); border-color: var(--accent); color: var(--accent); }
+.strip-lock.on { background: rgba(230,169,58,0.18); border-color: var(--amber); color: var(--amber); }
 .strip.linked { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* Locked: the camera controls stop taking input and say so. */
+.strip.locked .camera-controls, .strip.locked .tally-lamp { pointer-events: none; }
+.strip.locked .camera-controls { opacity: 0.55; }
+
+/* On air: the tally state reads from across the room. Beats the gang border. */
+.strip.on-air { border-color: var(--tally-on); box-shadow: 0 0 0 2px var(--tally-on), 0 0 22px rgba(224,71,63,0.35); }
+.strip.on-air .strip-title { color: #ff8a80; }
 .strip-ip:hover { color: var(--accent); }
 
 .health-dot {
@@ -152,6 +167,7 @@ body:has(> .strips) {
 .health-dot.offline { background: var(--red); box-shadow: 0 0 6px var(--red); }
 .health-note { font-size: 10px; color: var(--text-dim); min-height: 12px; margin-top: -4px; }
 .health-note.amber { color: var(--amber); }
+.health-note.ok { color: var(--green); }
 
 .ndi-preview {
     position: relative;
@@ -189,7 +205,7 @@ body:has(> .strips) {
 .tally-lamp {
     height: 26px;
     border-radius: 4px;
-    background: var(--tally-off);
+    background: var(--panel-raised);
     border: 1px solid var(--border);
     display: flex; align-items: center; justify-content: center;
     font-weight: 700; letter-spacing: .08em; font-size: 12px;
@@ -338,6 +354,16 @@ body:has(> .strips) {
     transform: translateX(calc(-50% + var(--offset, 0) * 42px));
 }
 .rocker-track:active .rocker-handle { background: var(--accent); }
+.rocker-arrow {
+    position: absolute; top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px; line-height: 1; letter-spacing: -2px;
+    color: var(--accent);
+    opacity: calc(0.25 + var(--push, 0) * 0.75);
+    pointer-events: none;
+}
+.rocker-arrow.back { left: 7px; }
+.rocker-arrow.fwd { right: 9px; }
 
 /* Select */
 .control-select {
