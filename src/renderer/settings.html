@@ -36,6 +36,25 @@
     </section>
 
     <section class="settings-section">
+        <h2>vMix Tally</h2>
+        <p class="settings-hint">Tally comes from vMix's TCP API. Pick each camera's vMix input under Channels. Leave the address empty to turn tally off.</p>
+        <div class="settings-form">
+            <label class="settings-field">
+                <span>vMix Address</span>
+                <input type="text" id="set-vmix-host" placeholder="192.168.4.100">
+            </label>
+            <label class="settings-field">
+                <span>TCP API Port</span>
+                <input type="number" id="set-vmix-port" min="1" max="65535" placeholder="8099">
+            </label>
+            <div class="settings-field">
+                <span>Status</span>
+                <span id="vmix-status" class="vmix-status">&hellip;</span>
+            </div>
+        </div>
+    </section>
+
+    <section class="settings-section">
         <h2>Channels</h2>
         <div id="channel-settings-table" class="channel-settings-table"></div>
     </section>

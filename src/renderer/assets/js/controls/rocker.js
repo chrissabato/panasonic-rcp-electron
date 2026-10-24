@@ -2,6 +2,20 @@
 // from center reports a proportional speed while held; releasing (or losing
 // pointer capture for any reason) always snaps back to center and reports
 // the stop value -- a lens motor should never be left running.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** A double chevron pointing back (left) or forward (right). */
+function chevrons(direction) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 20 16');
+    svg.setAttribute('class', `rocker-arrow ${direction}`);
+    svg.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', direction === 'back' ? 'M10 2 L4 8 L10 14 M16 2 L10 8 L16 14' : 'M4 2 L10 8 L4 14 M10 2 L16 8 L10 14');
+    svg.append(path);
+    return svg;
+}
+
 export function createRocker({ min = 1, max = 99, center = 50, leftLabel = '', rightLabel = '', onChange } = {}) {
     const wrap = document.createElement('div');
     wrap.className = 'rocker';
@@ -22,13 +36,10 @@ export function createRocker({ min = 1, max = 99, center = 50, leftLabel = '', r
     track.setAttribute('aria-valuenow', String(center));
 
     // Chevrons at each end light up with the push, so it reads as a speed
-    // control that springs back, not a position slider.
-    const backArrow = document.createElement('span');
-    backArrow.className = 'rocker-arrow back';
-    backArrow.textContent = '‹‹';
-    const fwdArrow = document.createElement('span');
-    fwdArrow.className = 'rocker-arrow fwd';
-    fwdArrow.textContent = '››';
+    // control that springs back, not a position slider. Drawn as SVG rather
+    // than text so they sit exactly on the track's centre line.
+    const backArrow = chevrons('back');
+    const fwdArrow = chevrons('fwd');
     const handle = document.createElement('div');
     handle.className = 'rocker-handle';
     track.append(backArrow, fwdArrow, handle);
@@ -42,7 +53,9 @@ export function createRocker({ min = 1, max = 99, center = 50, leftLabel = '', r
     }
 
     const HALF_RANGE = Math.max(center - min, max - center);
-    const DRAG_PX_FOR_FULL_SPEED = 60;
+    // Full speed is reached with the handle at the end of the track, whatever
+    // size the track is drawn at (it's sized for touch).
+    let pxForFullSpeed = 60;
 
     function render(offsetPct) {
         track.style.setProperty('--offset', String(offsetPct));
@@ -68,12 +81,15 @@ export function createRocker({ min = 1, max = 99, center = 50, leftLabel = '', r
     track.addEventListener('pointerdown', (e) => {
         dragging = true;
         startX = e.clientX;
+        const trackWidth = track.getBoundingClientRect().width;
+        const handleWidth = handle.getBoundingClientRect().width;
+        pxForFullSpeed = Math.max(30, (trackWidth - handleWidth) / 2 - 3);
         track.setPointerCapture(e.pointerId);
     });
 
     track.addEventListener('pointermove', (e) => {
         if (!dragging) return;
-        const pct = Math.max(-1, Math.min(1, (e.clientX - startX) / DRAG_PX_FOR_FULL_SPEED));
+        const pct = Math.max(-1, Math.min(1, (e.clientX - startX) / pxForFullSpeed));
         render(pct);
         const speed = speedFromOffsetPct(pct);
         track.setAttribute('aria-valuenow', String(speed));

@@ -172,7 +172,7 @@ The PHP panel shows the values the app last sent, so changes made on the camera 
 - **Pacing:** pace frames by due time on a short timer, not with a `1000/fps` interval. Windows timers fire on a ~15.6 ms clock, so a 33 ms interval runs at ~47 ms, which is 21 fps (measured).
 - **Rendering:** add `ndiView.js` with one canvas per strip, above the tally lamp. Use WebGL, converting UYVY→RGB in a fragment shader so the CPU doesn't do it. Fall back to `putImageData` for BGRA.
 - **States:** show "No source", "Connecting" and "No signal" overlays, and reconnect automatically if a source disappears.
-- **Tally (optional):** the panel's tally toggle could also send NDI tally metadata to the receiver. Decide whether that's wanted alongside the P2 `$RTlySw` tally.
+- **Tally:** ~~the panel's tally toggle could also send NDI tally metadata to the receiver.~~ *Superseded 2026-10-23:* tally now comes from **vMix** (TCP API, `SUBSCRIBE TALLY` on port 8099) and is display-only: red ON AIR for program, green PREVIEW for preview. Each channel is mapped to a vMix input in Settings, by input key. There is no manual tally, and the app never sets the camera's `$RTlySw` lamp.
 
 ### Phase 5: Packaging
 
@@ -210,14 +210,22 @@ Tested against an AG-CX370, serial DV24782369EC48, on 2026-10-22 and 2026-10-23.
   | `$AIrsSw` | On/Off | Auto iris. |
   | `$AIrsLv` | −50..50 | **Exposure compensation** (auto iris level). Holds its value; confirmed on the camera's screen. |
   | `$AIrsLvEf` | −50..50 | Probably the "auto iris level effect" menu item. Not written to yet, and its meaning is unconfirmed. |
-  | `$RGain` / `$BGain` | −10..10 on 2026-10-22; **−200..200** on 2026-10-23 | The range may depend on a camera mode, which could be a clue to the ignored writes. The app reads it with `:c` on every set, so either range works. ⚠️ **Writes are acknowledged but ignored** (R stayed 0 and B stayed −2 while WB mode was B). Likely gated by a camera mode or menu setting that hasn't been found yet. |
+  | `$RGain` / `$BGain` | −10..10 on 2026-10-22; **−200..200** on 2026-10-23 | The range may depend on a camera mode, which could be a clue to the ignored writes. The app reads it with `:c` on every set, so either range works. ⚠️ **Writes were acknowledged but ignored** on 2026-10-22 (R stayed 0 and B stayed −2 while WB mode was B). **On 2026-10-23 a write applied** (`$RGain:=1` read back 1, then restored), so whatever gated it has changed; possibly the WB mode. |
   | `$WBalSel` | A / B / Preset | |
   | `$Awb:Act` | — | Always answers busy (`:#`) at first; poll `$Awb:?` until it settles. |
   | `$RTlySw`, `$AFcSw` | On/Off | Tally and auto focus. |
   | `$ZmSpd`, `$FcSpd` | queried with `:c` | Zoom and focus speed; the UI uses 1..99 with 50 as stop. |
+  | `$MPed` | −200..200 | Master pedestal (black level); read 16. **Writes are acknowledged but ignored** (`:=17` read back 16), like R/B gain was. Not in the app. |
+  | `$RPed`, `$GPed`, `$BPed` | −100..100 | R/G/B pedestal; read 0. Writes not tried. |
+  | `$MGain` | no range (`:i!`) | Master gain; reads 0. **Writes are refused**: `:=` answers `:!` "Not Supported" for 1, 2, 3, 6, −3 and 24. Not in the app. |
+  | `$AgcSw` | On/Off | Auto gain; read Off. |
+  | `$DtlSw`, `$OisSw` | On/Off | Detail and optical image stabiliser; both read On. |
+  | `$FcPos` | 9000..82500 | Focus position range; `:?` gives no value. |
+
+  Probed 2026-10-23 (camera at 192.168.4.24), read-only except the pedestal, gain and R gain writes above, which were restored. **No answer** from any guessed name for shutter (`$Shtr`, `$ShtrSw`, `$ShtrSel`, …), ND (`$ND`, `$NdSw`, `$NdFlt`, …) or an F-number (`$FNo`, `$IrsF`, …), so the iris fader shows the raw 0–100 value. The camera has no read-only way to list a field's options: other query forms (`:l`, `:L`, `:r`, …) answer busy (`:#`).
 
 - **Intermittent `not_applied`:** once on 2026-10-23, auto iris Off and an Exp Comp drag were acknowledged but read back different values. Neither reproduced later the same day. The suspected cause is another controller connected at the same time; the next occurrence's error will show the camera's value.
-- **Unresolved:** R/B gain writes. To investigate, change R gain on the camera's menu, read `$RGain:?` to see whether it follows, and look for a lock or mode setting nearby on that menu page. This should be solved in the PHP app before Phase 2, or the port carries the same problem.
+- **Unresolved:** what gates paint and pedestal writes. R gain writes were ignored on 2026-10-22 but applied on 2026-10-23; master pedestal writes are still ignored. To investigate, compare the camera's menu settings (WB mode, scene file, any remote/paint lock) between a state where writes apply and one where they don't.
 
 ---
 
@@ -226,5 +234,5 @@ Tested against an AG-CX370, serial DV24782369EC48, on 2026-10-22 and 2026-10-23.
 1. ~~Can NDI|HX streaming and P2 control run at the same time (Phase 0.1)?~~ Yes, confirmed on the camera on 2026-10-23.
 2. ~~Which NDI binding to use, or whether to write a custom addon (Phase 0.3)?~~ Neither: there's no Windows ARM64 NDI library, so an x64 helper runs under emulation (Phase 0.2).
 3. Which ARM64 device is the reference test machine?
-4. Should the panel's tally also drive NDI tally?
+4. ~~Should the panel's tally also drive NDI tally?~~ No: tally comes from vMix and is display-only (Phase 4).
 5. Should the PHP app be kept as a fallback, or retired once the Electron app ships?

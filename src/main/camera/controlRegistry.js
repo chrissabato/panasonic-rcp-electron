@@ -6,12 +6,12 @@
  * 'momentary' controls (zoom/focus speed, AWB trigger) are commands, not
  * state: they're never persisted to channel_state and never appear in saved
  * scenes -- recalling a "look" should never move the lens.
+ *
+ * Tally isn't a control: it comes from vMix and is shown, never set (see
+ * main/vmix). Scenes saved when it was a control still hold a tally value;
+ * recall skips it because it's no longer in this list.
  */
 const DEFS = Object.freeze({
-    tally: {
-        type: 'toggle', default: false,
-        label: 'Tally', group: 'tally',
-    },
     awb_mode: {
         type: 'select', default: 1,
         options: { 1: 'AWB A', 2: 'AWB B', 10: 'PRESET' },

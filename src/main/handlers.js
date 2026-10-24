@@ -42,6 +42,7 @@ const FAILURE_CODES = {
  *   queue     CommandQueue (one job at a time per camera)
  *   clientFor (channelId) => CameraClient built from the current config
  *   log       (message) => void
+ *   tallyFor  (channelId) => 'program' | 'preview' | 'off' | null, from vMix (optional)
  * and optionally the hooks onSettingsChanged and onChannelConfigChanged.
  */
 function createHandlers(ctx) {
@@ -130,6 +131,7 @@ function createHandlers(ctx) {
                 config: publicConfig(store.getChannelConfig(channelId)),
                 state: store.getChannelState(channelId),
                 health: store.getHealth(channelId),
+                tally: ctx.tallyFor?.(channelId) ?? null,
             };
         }
         return { channels, controls: registry.all() };

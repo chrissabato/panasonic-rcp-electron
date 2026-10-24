@@ -60,7 +60,6 @@ test('readValues maps the camera\'s values onto UI controls', () => withSim({}, 
         wb_b: 40, // -2 of -10..10
         auto_iris: false,
         auto_focus: true,
-        tally: false,
         awb_mode: 2, // B
     });
 }));
@@ -83,9 +82,9 @@ test('exposure compensation maps -50..50 onto $AIrsLv', () => withSim({}, async 
 
 test('boolean and enum commands', () => withSim({}, async (sim) => {
     const client = clientFor(sim);
-    assert.ok((await client.setTally(true)).isOk());
+    assert.ok((await client.setAutoIris(true)).isOk());
     assert.ok((await client.setAwbMode(10)).isOk());
-    assert.equal(sim.state.RTlySw, 'On');
+    assert.equal(sim.state.AIrsSw, 'On');
     assert.equal(sim.state.WBalSel, 'Preset');
     assert.throws(() => client.setAwbMode(3), RangeError);
 }));
@@ -103,18 +102,18 @@ test('self-closing ack completes the read without waiting for the timeout', () =
 }));
 
 test('wrong password is reported as an auth failure', () => withSim({}, async (sim) => {
-    const response = await clientFor(sim, { password: 'nope' }).setTally(true);
+    const response = await clientFor(sim, { password: 'nope' }).setAutoIris(true);
     assert.equal(response.state, CameraState.AUTH_FAILED);
     assert.match(response.error, /Wrong User/);
 }));
 
-test('":!" means not supported and ":#" means busy', () => withSim({ unsupported: ['AFcSw'], busy: ['RTlySw'] }, async (sim) => {
+test('":!" means not supported and ":#" means busy', () => withSim({ unsupported: ['AFcSw'], busy: ['AIrsSw'] }, async (sim) => {
     const client = clientFor(sim);
     const unsupported = await client.setAutoFocus(true);
     assert.equal(unsupported.state, CameraState.UNEXPECTED);
     assert.match(unsupported.error, /not supported/);
 
-    const busy = await client.setTally(true);
+    const busy = await client.setAutoIris(true);
     assert.equal(busy.state, CameraState.UNEXPECTED);
     assert.match(busy.error, /busy/);
 }));
@@ -151,7 +150,7 @@ test('closed port is unreachable', async () => {
     await new Promise((r) => server.close(r));
 
     const client = new CameraClient({ ipAddress: '127.0.0.1', port, connectTimeoutMs: 500 });
-    assert.equal((await client.setTally(true)).state, CameraState.UNREACHABLE);
+    assert.equal((await client.setAutoIris(true)).state, CameraState.UNREACHABLE);
 });
 
 test('a camera that accepts but never answers times out as unreachable', async () => {

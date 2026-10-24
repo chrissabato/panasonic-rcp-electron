@@ -58,6 +58,14 @@ export function saveSettings(payload) {
     return request('saveSettings', payload);
 }
 
+export function getVmix() {
+    return request('getVmix');
+}
+
+export function saveVmix(payload) {
+    return request('saveVmix', payload);
+}
+
 export function getAppInfo() {
     return request('getAppInfo');
 }

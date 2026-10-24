@@ -110,13 +110,13 @@ CREATE TABLE IF NOT EXISTS settings (
                 }
             }
 
-            for (const key of ['timeouts', 'poll']) {
-                insertSetting.run(key, JSON.stringify(defaultSettings[key]));
+            for (const [key, value] of Object.entries(defaultSettings)) {
+                insertSetting.run(key, JSON.stringify(value));
             }
         })();
     }
 
-    /** Global settings (timeouts, poll). */
+    /** Global settings (timeouts, poll, vmix). */
     getSettings() {
         const result = {};
         for (const row of this.db.prepare('SELECT setting_key, setting_value FROM settings').all()) {

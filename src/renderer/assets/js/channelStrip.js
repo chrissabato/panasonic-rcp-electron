@@ -1,4 +1,4 @@
-import { createKnob } from './controls/knob.js';
+import { createFader } from './controls/fader.js';
 import { createToggle } from './controls/toggle.js';
 import { createRocker } from './controls/rocker.js';
 import { createXyPad } from './controls/xyPad.js';
@@ -29,6 +29,7 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
     const els = {};
     const preview = createNdiView();
     let locked = false;
+    let currentConfig = {};
 
     function init(schema, channelData) {
         root.innerHTML = '';
@@ -47,7 +48,7 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         els.ip = document.createElement('div');
         els.ip.className = 'strip-ip';
         els.ip.title = 'Click to edit IP / name';
-        els.ip.addEventListener('click', () => onConfigOpen?.(channelId, channelData.config));
+        els.ip.addEventListener('click', () => onConfigOpen?.(channelId, currentConfig));
 
         els.link = document.createElement('button');
         els.link.type = 'button';
@@ -74,58 +75,52 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         els.healthNote = document.createElement('div');
         els.healthNote.className = 'health-note';
 
+        // Tally comes from vMix and is shown, never set (see setTally).
         els.tally = document.createElement('div');
         els.tally.className = 'tally-lamp';
-        els.tally.textContent = 'TALLY';
-        els.tally.addEventListener('click', () => {
-            const next = !widgets.tally.getValue();
-            widgets.tally.setValue(next);
-            handleChange('tally', next, true);
-        });
-        // Tally is a state: grey when off; when on, the lamp goes bright red and
-        // the whole strip glows red, so it reads from across the room.
-        widgets.tally = {
-            setValue: (v) => {
-                els.tally.classList.toggle('on', !!v);
-                els.tally.textContent = v ? 'ON AIR' : 'TALLY';
-                root.classList.toggle('on-air', !!v);
-                widgets.tally._v = !!v;
-            },
-            getValue: () => !!widgets.tally._v,
-        };
+        els.tally.setAttribute('role', 'status');
+        setTally(channelData.tally ?? null);
 
-        const controlGroup = document.createElement('div');
-        controlGroup.className = 'control-group camera-controls';
+        // Two columns: Paint and Lens on the left (set and leave), and iris on
+        // the right as a tall fader, because it's what the operator rides.
+        const controls = document.createElement('div');
+        controls.className = 'strip-body camera-controls';
 
-        controlGroup.append(groupLabel('Paint'));
-        controlGroup.append(buildLine([
-            buildStack([
-                buildSelectCell('awb_mode', schema.awb_mode),
-                buildButtonCell('trigger_awb', schema.trigger_awb),
-            ]),
-            buildPaintPadCell(schema.wb_r, schema.wb_b),
-        ]));
+        const main = document.createElement('div');
+        main.className = 'strip-col';
+        const paintRow = document.createElement('div');
+        paintRow.className = 'paint-awb';
+        paintRow.append(buildSelect('awb_mode', schema.awb_mode), buildButton('trigger_awb', schema.trigger_awb));
+        main.append(section('Paint', [paintRow, buildPaintPad(schema.wb_r, schema.wb_b)]));
+        main.append(section('Lens', [
+            buildRockerRow('zoom', schema.zoom),
+            buildRockerRow('focus', schema.focus),
+        ], buildInlineToggle('auto_focus', schema.auto_focus, 'AF')));
 
         // Only one of Iris and Exp Comp applies at a time: manual iris is
         // overridden by the camera's auto loop, and Exp Comp only steers auto
         // iris. updateIrisMode() shows the one that matches Auto Iris.
-        els.irisCell = buildKnobCell('iris', schema.iris);
-        els.expCompCell = buildKnobCell('iris_level', schema.iris_level);
-        controlGroup.append(groupLabel('Iris'));
-        controlGroup.append(buildLine([
-            els.irisCell,
-            els.expCompCell,
-            buildToggleCell('auto_iris', schema.auto_iris),
-        ]));
+        els.irisCell = buildFaderCell('iris', schema.iris, 'Iris');
+        els.expCompCell = buildFaderCell('iris_level', schema.iris_level, 'Exp Comp');
+        const irisCol = document.createElement('div');
+        irisCol.className = 'strip-col strip-col-iris';
+        const autoIris = buildInlineToggle('auto_iris', schema.auto_iris, 'AUTO');
+        autoIris.classList.add('fader-auto');
+        irisCol.append(section('Iris', [els.irisCell, els.expCompCell, autoIris]));
 
-        controlGroup.append(groupLabel('Lens'));
-        controlGroup.append(buildLine([
-            buildStack([
-                buildRockerCell('zoom', schema.zoom),
-                buildRockerCell('focus', schema.focus),
-            ]),
-            buildToggleCell('auto_focus', schema.auto_focus),
-        ]));
+        controls.append(main, irisCol);
+
+        // Shown instead of the controls while the channel has no camera IP.
+        els.emptyCard = document.createElement('div');
+        els.emptyCard.className = 'strip-empty';
+        const emptyText = document.createElement('p');
+        emptyText.textContent = 'No camera';
+        const setIpBtn = document.createElement('button');
+        setIpBtn.type = 'button';
+        setIpBtn.className = 'control-button';
+        setIpBtn.textContent = 'Set camera IP';
+        setIpBtn.addEventListener('click', () => onConfigOpen?.(channelId, currentConfig));
+        els.emptyCard.append(emptyText, setIpBtn);
 
         const recallRow = document.createElement('div');
         recallRow.className = 'strip-recall-row';
@@ -137,54 +132,60 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         recallBtn.addEventListener('click', () => onQuickRecall?.(channelId));
         recallRow.append(recallBtn);
 
-        root.append(header, els.healthNote, preview.el, els.tally, controlGroup, recallRow);
+        root.append(header, els.healthNote, preview.el, els.tally, controls, recallRow, els.emptyCard);
 
         update(channelData);
     }
 
-    function groupLabel(text) {
-        const el = document.createElement('div');
-        el.className = 'group-label';
-        el.textContent = text;
-        return el;
-    }
-
-    function buildLine(cells) {
-        const line = document.createElement('div');
-        line.className = 'control-line';
-        line.append(...cells);
-        return line;
-    }
-
-    function buildStack(cells) {
-        const stack = document.createElement('div');
-        stack.className = 'control-stack';
-        stack.append(...cells);
-        return stack;
-    }
-
-    function cell(labelText, widgetEl) {
-        const el = document.createElement('div');
-        el.className = 'control-cell';
+    /** A titled block of controls; extra (e.g. a toggle) sits at the right of the title. */
+    function section(title, children, extra) {
+        const el = document.createElement('section');
+        el.className = 'strip-section';
+        const head = document.createElement('div');
+        head.className = 'section-head';
         const label = document.createElement('span');
-        label.className = 'control-cell-label';
-        label.textContent = labelText;
-        el.append(label, widgetEl);
+        label.className = 'group-label';
+        label.textContent = title;
+        head.append(label);
+        if (extra) head.append(extra);
+        el.append(head, ...children);
         return el;
     }
 
-    function buildKnobCell(control, def) {
-        const knob = createKnob({
+    function buildFaderCell(control, def, label) {
+        const fader = createFader({
             min: def.min, max: def.max, value: def.default,
             onChange: (v, { final }) => handleChange(control, v, final),
         });
-        widgets[control] = knob;
-        return cell(def.label, knob.el);
+        widgets[control] = fader;
+        const el = document.createElement('div');
+        el.className = 'fader-cell';
+        const caption = document.createElement('span');
+        caption.className = 'fader-label';
+        caption.textContent = label;
+        el.append(fader.el, caption);
+        return el;
+    }
+
+    /** A small labelled switch, for section titles (AF, AUTO). */
+    function buildInlineToggle(control, def, shortLabel) {
+        const toggle = createToggle({
+            value: def.default,
+            onChange: (v) => handleChange(control, v, true),
+        });
+        widgets[control] = toggle;
+        const el = document.createElement('label');
+        el.className = 'inline-toggle';
+        el.title = def.label;
+        const text = document.createElement('span');
+        text.textContent = shortLabel;
+        el.append(text, toggle.el);
+        return el;
     }
 
     // One pad drives two independent controls: B on the x axis, R on the y
     // axis. Each axis keeps its own pending guard/throttle via handleChange.
-    function buildPaintPadCell(rDef, bDef) {
+    function buildPaintPad(rDef, bDef) {
         const pad = createXyPad({
             min: rDef.min, max: rDef.max, x: bDef.default, y: rDef.default,
             xLabel: 'B', yLabel: 'R',
@@ -195,31 +196,28 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         });
         widgets.wb_r = { setValue: pad.setY, getValue: pad.getY };
         widgets.wb_b = { setValue: pad.setX, getValue: pad.getX };
-        const padCell = cell('R / B Paint', pad.el);
-        padCell.classList.add('xy-pad-cell');
-        return padCell;
+        pad.el.classList.add('paint-pad');
+        return pad.el;
     }
 
-    function buildToggleCell(control, def) {
-        const toggle = createToggle({
-            value: def.default,
-            onChange: (v) => handleChange(control, v, true),
-        });
-        widgets[control] = toggle;
-        return cell(def.label, toggle.el);
-    }
-
-    function buildRockerCell(control, def) {
+    /** "Zoom  W ‹‹ ● ›› T" on one line. */
+    function buildRockerRow(control, def) {
         const rocker = createRocker({
             min: def.min, max: def.max, center: def.default,
             leftLabel: def.left_label, rightLabel: def.right_label,
             onChange: (v, { final }) => handleChange(control, v, final),
         });
         widgets[control] = rocker;
-        return cell(def.label, rocker.el);
+        const el = document.createElement('div');
+        el.className = 'rocker-row';
+        const label = document.createElement('span');
+        label.className = 'rocker-row-label';
+        label.textContent = def.label;
+        el.append(label, rocker.el);
+        return el;
     }
 
-    function buildSelectCell(control, def) {
+    function buildSelect(control, def) {
         const select = document.createElement('select');
         select.className = 'control-select';
         for (const [optValue, optLabel] of Object.entries(def.options)) {
@@ -229,18 +227,19 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
             select.append(opt);
         }
         select.addEventListener('change', () => handleChange(control, Number(select.value), true));
+        select.title = def.label;
         widgets[control] = {
             setValue: (v) => { select.value = String(v); },
             getValue: () => Number(select.value),
         };
-        return cell(def.label, select);
+        return select;
     }
 
-    function buildButtonCell(control, def) {
+    function buildButton(control, def) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'control-button';
-        button.textContent = 'Trigger';
+        button.textContent = def.label;
         button.addEventListener('click', async () => {
             if (locked) return;
             button.disabled = true;
@@ -252,7 +251,7 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
             }
         });
         widgets[control] = { setValue: () => {}, getValue: () => true };
-        return cell(def.label, button);
+        return button;
     }
 
     function updateIrisMode() {
@@ -285,6 +284,21 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         root.classList.toggle('linked', on);
         els.link.classList.toggle('on', on);
         els.link.setAttribute('aria-pressed', String(on));
+    }
+
+    /**
+     * vMix tally for this camera's input: 'program' (red ON AIR, and the strip
+     * glows red so it reads from across the room), 'preview' (green), 'off',
+     * or null when there's no input assigned or vMix isn't connected.
+     */
+    function setTally(state) {
+        els.tally.classList.toggle('on', state === 'program');
+        els.tally.classList.toggle('preview', state === 'preview');
+        els.tally.classList.toggle('unknown', state === null);
+        els.tally.textContent = state === 'program' ? 'ON AIR' : state === 'preview' ? 'PREVIEW' : 'TALLY';
+        els.tally.title = state === null ? 'No vMix tally: assign this channel a vMix input in Settings' : 'Tally from vMix';
+        root.classList.toggle('on-air', state === 'program');
+        root.classList.toggle('on-preview', state === 'preview');
     }
 
     function setLocked(on) {
@@ -323,8 +337,10 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
 
     function update(channelData) {
         if (!channelData) return;
+        currentConfig = channelData.config;
         els.name.textContent = channelData.config.display_name;
         els.ip.textContent = channelData.config.ip_address || '(no IP set)';
+        root.classList.toggle('unconfigured', !channelData.config.ip_address);
 
         for (const [control, value] of Object.entries(channelData.state)) {
             if (pendingUntil[control] && Date.now() < pendingUntil[control]) continue;
@@ -333,6 +349,7 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         updateIrisMode();
 
         updateHealth(channelData.health);
+        if ('tally' in channelData) setTally(channelData.tally);
     }
 
     // status is a CameraState from the main process: ok, unreachable,
@@ -365,5 +382,8 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         root.classList.toggle('offline', health.status === 'unreachable');
     }
 
-    return { init, update, updateHealth, preview, mirror, setLinked, setLocked };
+    return {
+        init, update, updateHealth, preview, mirror, setLinked, setLocked, setTally,
+        isConfigured: () => Boolean(currentConfig.ip_address),
+    };
 }

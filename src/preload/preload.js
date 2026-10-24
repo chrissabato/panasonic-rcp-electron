@@ -18,6 +18,12 @@ contextBridge.exposeInMainWorld('rcp', {
     getAppInfo: invoke('getAppInfo'),
     openExternal: invoke('openExternal'),
     openNdiLicenses: invoke('openNdiLicenses'),
+    // Help > About in the menu bar asks the page to show its About box.
+    onShowAbout: (fn) => { ipcRenderer.on('rcp:showAbout', () => fn()); },
+    // vMix tally pushed from the main process: { channelId: 'program' | 'preview' | 'off' | null }.
+    onTally: (fn) => { ipcRenderer.on('rcp:tally', (_event, tally) => fn(tally)); },
+    getVmix: invoke('getVmix'),
+    saveVmix: invoke('saveVmix'),
     // Asks for a port to the NDI process; it arrives as a window "message" event (see below).
     ndiConnect: () => ipcRenderer.send('ndi:connect'),
 });

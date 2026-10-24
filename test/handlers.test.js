@@ -72,11 +72,11 @@ test('setControl validates its input', async () => {
 test('setControl reports camera failures with distinct codes', async () => {
     const t = await setup({ password: 'other' });
     try {
-        await rejectsWith(t.handlers.setControl({ channel: 1, control: 'tally', value: true }), 'auth_failed');
+        await rejectsWith(t.handlers.setControl({ channel: 1, control: 'auto_iris', value: true }), 'auth_failed');
         assert.equal(t.store.getHealth(1).status, 'auth_failed');
-        assert.equal(t.store.getChannelState(1).tally, false, 'failed sets are not persisted');
+        assert.equal(t.store.getChannelState(1).auto_iris, false, 'failed sets are not persisted');
 
-        await rejectsWith(t.handlers.setControl({ channel: 2, control: 'tally', value: true }), 'unreachable');
+        await rejectsWith(t.handlers.setControl({ channel: 2, control: 'auto_iris', value: true }), 'unreachable');
     } finally {
         await t.teardown();
     }

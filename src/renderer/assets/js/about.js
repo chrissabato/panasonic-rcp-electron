@@ -1,10 +1,11 @@
 import * as api from './api.js';
 
 /**
- * The About box: app version, and the NDI notices NDI's licensing asks for
- * (trademark statement, copyright, a link to ndi.video, and its third-party
- * licenses file). Links marked data-external, here and in the header, open
- * in the user's browser through the main process, which only allows ndi.video.
+ * The About box, opened from Help > About in the menu bar: app version, and
+ * the NDI notices NDI's licensing asks for (trademark statement, copyright, a
+ * link to ndi.video, and its third-party licenses file). Links marked
+ * data-external open in the user's browser through the main process, which
+ * only allows ndi.video.
  */
 export function initAbout() {
     const modal = document.getElementById('about-modal');
@@ -39,7 +40,7 @@ export function initAbout() {
         modal.setAttribute('aria-hidden', 'true');
     }
 
-    document.getElementById('about-open-btn').addEventListener('click', open);
+    window.rcp.onShowAbout(open);
     document.getElementById('about-modal-close-btn').addEventListener('click', close);
     modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.classList.contains('hidden')) close(); });

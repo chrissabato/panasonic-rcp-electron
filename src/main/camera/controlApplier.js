@@ -1,8 +1,6 @@
 /** Dispatches a validated (control, value) pair to the right CameraClient method. Port of ControlApplier.php. */
 function apply(client, control, value) {
     switch (control) {
-        case 'tally':
-            return client.setTally(Boolean(value));
         case 'awb_mode':
             return client.setAwbMode(Number(value));
         case 'wb_r':

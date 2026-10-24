@@ -18,8 +18,9 @@ test('coerceValue validates select options', () => {
 });
 
 test('coerceValue handles toggles, buttons and unknown controls', () => {
-    assert.equal(registry.coerceValue('tally', 1), true);
-    assert.equal(registry.coerceValue('tally', 0), false);
+    assert.equal(registry.coerceValue('auto_iris', 1), true);
+    assert.equal(registry.coerceValue('auto_iris', 0), false);
+    assert.equal(registry.isValid('tally'), false, 'tally comes from vMix; it is not a control');
     assert.equal(registry.coerceValue('trigger_awb', false), true);
     assert.throws(() => registry.coerceValue('gamma', 1), RangeError);
     assert.equal(registry.isValid('toString'), false);

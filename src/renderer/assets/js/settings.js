@@ -4,6 +4,10 @@ const statusEl = document.getElementById('settings-status');
 const tableEl = document.getElementById('channel-settings-table');
 
 let channelRows = {};
+let vmix = { host: '', port: 8099, channels: {}, status: 'disabled', inputs: [] };
+const vmixHostInput = document.getElementById('set-vmix-host');
+const vmixPortInput = document.getElementById('set-vmix-port');
+const vmixStatusEl = document.getElementById('vmix-status');
 
 function wrapField(labelText, inputEl) {
     const wrap = document.createElement('label');
@@ -12,6 +16,48 @@ function wrapField(labelText, inputEl) {
     span.textContent = labelText;
     wrap.append(span, inputEl);
     return wrap;
+}
+
+/** Fills a channel's vMix input dropdown, keeping its selection (or the saved input while vMix is away). */
+function fillVmixInputs(select, channelId) {
+    const selected = select.dataset.touched ? select.value : (vmix.channels[channelId]?.key ?? '');
+    select.innerHTML = '';
+    select.append(new Option('(none)', ''));
+    for (const input of vmix.inputs) {
+        select.append(new Option(`${input.number}: ${input.title}`, input.key));
+    }
+    if (selected && !vmix.inputs.some((i) => i.key === selected)) {
+        const saved = vmix.channels[channelId];
+        const title = saved?.key === selected ? saved.title : '';
+        select.append(new Option(`${title || 'Saved input'} (not in vMix now)`, selected));
+    }
+    select.value = selected;
+}
+
+function showVmixStatus() {
+    const text = {
+        disabled: 'Off (no address)',
+        connecting: 'Connecting…',
+        unreachable: 'Not reachable',
+        connected: `Connected${vmix.version ? ` to vMix ${vmix.version}` : ''}, ${vmix.inputs.length} inputs`,
+    }[vmix.status] ?? vmix.status;
+    vmixStatusEl.textContent = text;
+    vmixStatusEl.className = `vmix-status ${vmix.status}`;
+}
+
+async function refreshVmix({ fillAddress = false } = {}) {
+    try {
+        vmix = await api.getVmix();
+    } catch (err) {
+        vmixStatusEl.textContent = `Unavailable: ${err.message}`;
+        return;
+    }
+    if (fillAddress) {
+        vmixHostInput.value = vmix.host;
+        vmixPortInput.value = vmix.port;
+    }
+    showVmixStatus();
+    for (const [channelId, row] of Object.entries(channelRows)) fillVmixInputs(row.vmixSelect, channelId);
 }
 
 function buildChannelRow(channelId, cfg) {
@@ -52,17 +98,22 @@ function buildChannelRow(channelId, cfg) {
     passwordInput.placeholder = cfg.has_password ? '(unchanged)' : '(none)';
     passwordInput.value = '';
 
+    const vmixSelect = document.createElement('select');
+    vmixSelect.addEventListener('change', () => { vmixSelect.dataset.touched = '1'; });
+    fillVmixInputs(vmixSelect, channelId);
+
     row.append(
         label,
         wrapField('Name', nameInput),
         wrapField('IP Address', ipInput),
         wrapField('Port', portInput),
         wrapField('Admin User', usernameInput),
-        wrapField('Admin Password', passwordInput)
+        wrapField('Admin Password', passwordInput),
+        wrapField('vMix Input (tally)', vmixSelect)
     );
     tableEl.append(row);
 
-    channelRows[channelId] = { nameInput, ipInput, portInput, usernameInput, passwordInput };
+    channelRows[channelId] = { nameInput, ipInput, portInput, usernameInput, passwordInput, vmixSelect };
 }
 
 async function load() {
@@ -111,10 +162,18 @@ async function save() {
         }
     }
 
+    const vmixPayload = {
+        host: vmixHostInput.value.trim(),
+        port: Number(vmixPortInput.value) || 8099,
+        channels: Object.fromEntries(Object.entries(channelRows).map(([id, row]) => [id, row.vmixSelect.value])),
+    };
+
     statusEl.textContent = 'Saving…';
     statusEl.classList.remove('error');
     try {
         const data = await api.saveSettings(payload);
+        vmix = await api.saveVmix(vmixPayload);
+        showVmixStatus();
         statusEl.textContent = 'Saved.';
         tableEl.innerHTML = '';
         channelRows = {};
@@ -129,4 +188,6 @@ async function save() {
 
 document.getElementById('settings-save-btn').addEventListener('click', save);
 
-load();
+// vMix first, so the channel rows' dropdowns are filled when they're built.
+refreshVmix({ fillAddress: true }).then(load);
+setInterval(() => refreshVmix(), 2000);

@@ -1,6 +1,6 @@
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { app, BrowserWindow, dialog, ipcMain, net, protocol } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol } = require('electron');
 
 const APP_ORIGIN = 'app://rcp';
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
@@ -17,6 +17,8 @@ const CSP = [
 const DEFAULT_SETTINGS = {
     timeouts: { connect_ms: 1500, total_ms: 2500 },
     poll: { fast_ms: 400, slow_ms: 7000 },
+    // vMix tally source; an empty host means no tally.
+    vmix: { host: '', port: 8099, channels: {} },
 };
 
 // The renderer is served from app://rcp/ rather than file:// so ES modules
@@ -90,7 +92,7 @@ async function start() {
     await app.whenReady();
     if (!loadNativeModules()) return;
 
-    const { StateStore } = require('./state/StateStore');
+    const { StateStore, CHANNEL_IDS } = require('./state/StateStore');
     const { CameraClient } = require('./camera/CameraClient');
     const { CommandQueue } = require('./camera/commandQueue');
     const { createHandlers } = require('./handlers');
@@ -99,6 +101,9 @@ async function start() {
     const { createSecrets } = require('./secrets');
     const { NdiHost, helperPath } = require('./ndiHost');
     const { createAppHandlers } = require('./appHandlers');
+    const { buildAppMenu } = require('./menu');
+    const { VmixTally } = require('./vmix/vmixTally');
+    const { createVmixHandlers } = require('./vmix/vmixHandlers');
 
     const store = new StateStore(path.join(app.getPath('userData'), 'rcp.sqlite'), {
         defaultSettings: DEFAULT_SETTINGS,
@@ -119,6 +124,16 @@ async function start() {
         });
     };
 
+    // Tally comes from vMix, by each channel's vMix input, and is pushed to the
+    // window as soon as it changes rather than waiting for the next fast poll.
+    const vmix = new VmixTally();
+    const tallyFor = (channelId) => vmix.tallyFor(store.getSettings().vmix.channels?.[channelId]?.key);
+    const pushTally = () => {
+        const tally = Object.fromEntries(CHANNEL_IDS.map((id) => [id, tallyFor(id)]));
+        for (const win of BrowserWindow.getAllWindows()) win.webContents.send('rcp:tally', tally);
+    };
+    vmix.on('change', pushTally);
+
     let poller = null;
     const ndi = new NdiHost();
     const { handlers, pollChannel } = createHandlers({
@@ -127,11 +142,14 @@ async function start() {
         clientFor,
         onSettingsChanged: () => poller?.restart(),
         onChannelConfigChanged: () => ndi.setChannels(store.getAllChannelConfigs()),
+        tallyFor,
     });
     const appHandlers = createAppHandlers({
         ndiLicensesPath: path.join(path.dirname(helperPath()), 'Processing.NDI.Lib.Licenses.txt'),
     });
-    registerIpc({ ...handlers, ...appHandlers }, { isTrustedSender: (frame) => isAppUrl(frame?.url) });
+    const vmixHandlers = createVmixHandlers({ store, vmix, onChanged: pushTally });
+    registerIpc({ ...handlers, ...appHandlers, ...vmixHandlers }, { isTrustedSender: (frame) => isAppUrl(frame?.url) });
+    vmix.configure(store.getSettings().vmix);
 
     poller = new HealthPoller({ pollChannel, getIntervalMs: () => store.getSettings().poll.slow_ms });
     poller.start();
@@ -143,6 +161,7 @@ async function start() {
     });
 
     serveRenderer();
+    Menu.setApplicationMenu(buildAppMenu({ panelUrl: `${APP_ORIGIN}/index.html` }));
     createWindow();
 
     app.on('activate', () => {
@@ -151,6 +170,7 @@ async function start() {
     app.on('will-quit', () => {
         poller.stop();
         ndi.stop();
+        vmix.stop();
         store.close();
     });
 }

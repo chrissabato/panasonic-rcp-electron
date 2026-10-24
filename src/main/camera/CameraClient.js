@@ -18,7 +18,6 @@ const READBACK = [
     { control: 'wb_b', field: 'BGain', ui: [0, 100] },
     { control: 'auto_iris', field: 'AIrsSw', kind: 'switch' },
     { control: 'auto_focus', field: 'AFcSw', kind: 'switch' },
-    { control: 'tally', field: 'RTlySw', kind: 'switch' },
     { control: 'awb_mode', field: 'WBalSel', kind: 'awb' },
 ];
 
@@ -111,11 +110,6 @@ class CameraClient {
 
     setWbBlueGain(uiValue) {
         return this.runScaledCamCtlCommand('BGain', uiValue, 0, 100);
-    }
-
-    // Red tally only: this camera family has a single-color lamp.
-    setTally(on) {
-        return this.runVerifiedSet('RTlySw', on ? 'On' : 'Off');
     }
 
     setIris(uiValue) {

@@ -12,6 +12,9 @@
     --red: #e0473f;
     --gray: #5b616a;
     --tally-on: #e0473f;
+    /* Widest a channel strip gets; with few cameras, the row is centered instead of stretched. */
+    --strip-max-width: 440px;
+    --strip-empty-width: 180px;
 }
 
 * { box-sizing: border-box; }
@@ -64,7 +67,7 @@ body:has(> .strips) {
 .header-btn:hover { color: var(--text); border-color: var(--accent); }
 .header-btn.on { color: var(--accent); border-color: var(--accent); background: rgba(61,139,253,0.15); }
 
-.settings-page { max-width: 900px; margin: 0 auto; padding: 18px; display: flex; flex-direction: column; gap: 18px; }
+.settings-page { max-width: 1100px; margin: 0 auto; padding: 18px; display: flex; flex-direction: column; gap: 18px; }
 .settings-section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
 .settings-section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; margin: 0 0 12px; color: var(--text-dim); }
 .settings-hint { font-size: 11px; color: var(--text-dim); margin: -6px 0 12px; }
@@ -79,7 +82,7 @@ body:has(> .strips) {
 .channel-settings-table { display: flex; flex-direction: column; gap: 10px; }
 .channel-settings-row {
     display: grid;
-    grid-template-columns: 44px 1fr 1fr 80px 1fr 1fr;
+    grid-template-columns: 44px 1fr 1fr 80px 1fr 1fr 1.6fr;
     gap: 10px;
     align-items: end;
     background: var(--panel-raised);
@@ -87,10 +90,11 @@ body:has(> .strips) {
     padding: 10px;
 }
 .channel-settings-label { font-weight: 700; align-self: center; }
-.channel-field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-dim); }
+.channel-field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-dim); min-width: 0; }
 .channel-field input, .channel-field select {
     background: var(--panel); border: 1px solid var(--border); color: var(--text);
     border-radius: 4px; padding: 6px 8px; font-size: 12px;
+    width: 100%; min-width: 0;
 }
 
 .settings-actions { display: flex; align-items: center; gap: 12px; }
@@ -101,6 +105,9 @@ body:has(> .strips) {
 .settings-actions button:hover { filter: brightness(1.1); }
 .settings-status { font-size: 12px; color: var(--text-dim); }
 .settings-status.error { color: var(--red); font-weight: 600; }
+.vmix-status { font-size: 13px; color: var(--text-dim); padding: 6px 0; }
+.vmix-status.connected { color: var(--green); }
+.vmix-status.unreachable { color: var(--amber); }
 
 @media (max-width: 700px) {
     .channel-settings-row { grid-template-columns: 1fr 1fr; }
@@ -111,7 +118,8 @@ body:has(> .strips) {
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: repeat(4, minmax(240px, 1fr));
+    grid-template-columns: var(--cols, repeat(4, minmax(0, var(--strip-max-width))));
+    justify-content: center;
     grid-auto-rows: minmax(0, 1fr);
     gap: 10px;
     padding: 10px;
@@ -148,12 +156,13 @@ body:has(> .strips) {
 .strip.linked { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 
 /* Locked: the camera controls stop taking input and say so. */
-.strip.locked .camera-controls, .strip.locked .tally-lamp { pointer-events: none; }
+.strip.locked .camera-controls { pointer-events: none; }
 .strip.locked .camera-controls { opacity: 0.55; }
 
 /* On air: the tally state reads from across the room. Beats the gang border. */
 .strip.on-air { border-color: var(--tally-on); box-shadow: 0 0 0 2px var(--tally-on), 0 0 22px rgba(224,71,63,0.35); }
 .strip.on-air .strip-title { color: #ff8a80; }
+.strip.on-preview { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
 .strip-ip:hover { color: var(--accent); }
 
 .health-dot {
@@ -202,6 +211,7 @@ body:has(> .strips) {
 .ndi-preview.live .ndi-toggle { opacity: 0; transition: opacity .15s; }
 .ndi-preview.live:hover .ndi-toggle, .ndi-preview .ndi-toggle:focus-visible { opacity: 1; }
 
+/* Tally from vMix: a display, not a button. */
 .tally-lamp {
     height: 26px;
     border-radius: 4px;
@@ -210,7 +220,7 @@ body:has(> .strips) {
     display: flex; align-items: center; justify-content: center;
     font-weight: 700; letter-spacing: .08em; font-size: 12px;
     color: var(--text-dim);
-    cursor: pointer;
+    cursor: default;
     transition: background .1s, color .1s;
 }
 .tally-lamp.on {
@@ -218,55 +228,113 @@ body:has(> .strips) {
     color: #fff;
     box-shadow: 0 0 14px rgba(224,71,63,0.6);
 }
-.tally-lamp.pending { opacity: 0.6; animation: pulse 0.6s infinite alternate; }
-@keyframes pulse { from { opacity: .5; } to { opacity: 1; } }
+.tally-lamp.preview { background: var(--green); color: #06210f; }
+.tally-lamp.unknown { opacity: 0.5; }
 
-.control-group { display: flex; flex-direction: column; gap: 8px; }
-
+/* Strip body: Paint and Lens on the left, the iris fader column on the right. */
+.strip-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 92px;
+    gap: 12px;
+    width: 100%;
+    max-width: 460px;
+    align-self: center;
+    flex: 1 0 auto; /* takes any height the preview leaves, so the fader grows */
+}
+.strip-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.strip-section { display: flex; flex-direction: column; gap: 8px; }
+.strip-col-iris .strip-section { flex: 1; }
+.section-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 3px;
+}
 .group-label {
     font-size: 11px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: .08em;
-    color: var(--text-dim);
-    margin: 2px 0 -2px;
+    letter-spacing: .1em;
+    color: var(--text);
 }
-.group-label:first-child { margin-top: 0; }
 
-.control-line { display: flex; align-items: center; justify-content: space-around; gap: 12px; }
-.control-stack { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.control-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.control-cell[hidden] { display: none; }
-.control-cell-label { font-size: 11px; color: var(--text-dim); text-align: center; white-space: nowrap; }
+.inline-toggle { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; letter-spacing: .06em; color: var(--text-dim); cursor: pointer; }
+.inline-toggle .toggle-switch { transform: scale(0.85); transform-origin: right center; }
+.fader-auto { align-self: center; }
+.fader-auto .toggle-switch { transform-origin: center; }
 
-/* Knob */
-.knob { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.knob-dial {
-    width: 52px; height: 52px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, var(--panel-raised), #15171b);
-    border: 1px solid var(--border);
+/* Paint: AWB mode and trigger on one line, the R/B pad under them. */
+.paint-awb { display: flex; gap: 8px; }
+.paint-awb .control-select { flex: 1; min-width: 0; }
+.paint-pad { width: 100%; max-width: 230px; align-self: center; }
+
+/* Lens: one line per rocker, label first. */
+.rocker-row { display: flex; align-items: center; gap: 6px; }
+.rocker-row .rocker { flex: 1; min-width: 0; }
+.rocker-row-label { font-size: 11px; color: var(--text-dim); width: 36px; flex-shrink: 0; }
+
+/* Iris fader: the control the operator rides, so it's big. */
+.fader-cell { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 0; }
+.fader-cell[hidden] { display: none; }
+.fader-label { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); }
+.fader { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; min-height: 0; }
+.fader-value { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; color: var(--text); }
+.fader-track {
+    --pos: 0.5;
     position: relative;
-    cursor: grab;
-    flex-shrink: 0;
+    flex: 1;
+    min-height: 120px;
+    width: 48px;
+    border-radius: 8px;
+    background: var(--panel-raised);
+    border: 1px solid var(--border);
+    cursor: ns-resize;
     touch-action: none;
 }
-.knob-dial:active { cursor: grabbing; }
-.knob-dial::after {
-    content: "";
-    position: absolute;
-    top: 6px; left: 50%;
-    width: 3px; height: 17px;
-    background: var(--real);
-    transform-origin: 50% 20px;
-    transform: translateX(-50%) rotate(calc(var(--angle, 0) * 1deg));
-    border-radius: 1.5px;
+.fader-fill {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: calc(var(--pos) * 100%);
+    border-radius: 0 0 7px 7px;
+    background: linear-gradient(to top, rgba(61,139,253,0.35), rgba(61,139,253,0.12));
+    pointer-events: none;
 }
-.knob-value { font-size: 13px; color: var(--text-dim); min-width: 28px; text-align: center; }
+/* A big grab point for touch: 30 px tall, overhanging the track, with three
+   grip lines centred on its middle (2 px lines at 0, 5 and 10 of a 12 px band). */
+.fader-thumb {
+    position: absolute; left: -10px; right: -10px;
+    bottom: calc(var(--pos) * (100% - 30px));
+    height: 30px;
+    border-radius: 6px;
+    background:
+        linear-gradient(to bottom,
+            rgba(0,0,0,0.3) 0 2px, transparent 2px 5px,
+            rgba(0,0,0,0.3) 5px 7px, transparent 7px 10px,
+            rgba(0,0,0,0.3) 10px 12px) center / 55% 12px no-repeat,
+        var(--real);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.55);
+    pointer-events: none;
+}
+.fader-track:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fader-track.dragging .fader-thumb { background: var(--accent); }
 
-/* XY pad (R/B paint): x = B, y = R; corners tinted toward the resulting cast */
-/* Pad sits beside the AWB stack: square, as wide as the space left, capped so it doesn't eat the strip's height */
-.xy-pad-cell { flex: 1 1 0; min-width: 110px; max-width: 150px; }
-.xy-pad { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
+/* A channel with no camera IP: a slim card instead of dead controls. */
+.strip-empty { display: none; }
+.strip.unconfigured .ndi-preview,
+.strip.unconfigured .tally-lamp,
+.strip.unconfigured .strip-body,
+.strip.unconfigured .strip-recall-row,
+.strip.unconfigured .strip-pills,
+.strip.unconfigured .health-note { display: none; }
+.strip.unconfigured .strip-header { flex-direction: column; align-items: flex-start; gap: 4px; }
+.strip.unconfigured .strip-empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    flex: 1;
+    color: var(--text-dim); font-size: 12px;
+    border: 1px dashed var(--border); border-radius: 6px;
+}
+.strip.unconfigured .strip-empty p { margin: 0; }
+.strip.unconfigured { opacity: 0.85; }
+.strip.unconfigured .health-dot { background: var(--gray); box-shadow: none; }
+.xy-pad { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .xy-pad-area {
     position: relative;
     width: 100%;
@@ -325,15 +393,17 @@ body:has(> .strips) {
 .toggle-switch.on::after { transform: translateX(22px); background: var(--accent); }
 
 /* Rocker (momentary zoom/focus speed) */
+/* Sized for touch: a 44 px track that fills its line, and a 38 px handle. */
 .rocker { display: flex; align-items: center; gap: 8px; }
-.rocker-label { font-size: 10px; color: var(--text-dim); width: 12px; text-align: center; flex-shrink: 0; }
+.rocker-label { font-size: 11px; color: var(--text-dim); width: 12px; text-align: center; flex-shrink: 0; }
 .rocker-track {
     position: relative;
-    width: 110px;
-    height: 28px;
+    flex: 1;
+    min-width: 110px;
+    height: 44px;
     background: var(--panel-raised);
     border: 1px solid var(--border);
-    border-radius: 15px;
+    border-radius: 22px;
     cursor: ew-resize;
     touch-action: none;
 }
@@ -347,23 +417,25 @@ body:has(> .strips) {
 }
 .rocker-handle {
     position: absolute;
-    top: 2px; left: 50%;
-    width: 22px; height: 22px;
+    top: 2px;
+    /* --offset is -1..1; the handle travels from end to end of the track. */
+    left: calc(50% + var(--offset, 0) * (50% - 22px));
+    width: 38px; height: 38px;
     border-radius: 50%;
     background: var(--real);
-    transform: translateX(calc(-50% + var(--offset, 0) * 42px));
+    transform: translateX(-50%);
 }
 .rocker-track:active .rocker-handle { background: var(--accent); }
 .rocker-arrow {
     position: absolute; top: 50%;
+    width: 24px; height: 20px;
     transform: translateY(-50%);
-    font-size: 14px; line-height: 1; letter-spacing: -2px;
-    color: var(--accent);
+    fill: none; stroke: var(--accent); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
     opacity: calc(0.25 + var(--push, 0) * 0.75);
     pointer-events: none;
 }
-.rocker-arrow.back { left: 7px; }
-.rocker-arrow.fwd { right: 9px; }
+.rocker-arrow.back { left: 10px; }
+.rocker-arrow.fwd { right: 10px; }
 
 /* Select */
 .control-select {
@@ -453,7 +525,6 @@ body:has(> .strips) {
 
 .scene-modal-content { width: 440px; max-width: 92vw; max-height: 80vh; overflow-y: auto; }
 
-.ndi-link { font-weight: 600; }
 
 .about-content { width: 420px; max-width: 92vw; gap: 12px; font-size: 13px; }
 .about-content p { margin: 0; line-height: 1.45; }

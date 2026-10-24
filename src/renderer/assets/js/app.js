@@ -71,6 +71,17 @@ linkAllBtn.addEventListener('click', () => {
 });
 
 const globalStatus = document.getElementById('global-status');
+const stripsEl = document.getElementById('strips');
+
+// Channels with no camera IP shrink to a slim card, so configured cameras get
+// the width, up to --strip-max-width. Channels keep their positions, so CH3 is
+// always third.
+function sizeColumns() {
+    const cols = CHANNEL_IDS.map((id) => (strips[id]?.isConfigured()
+        ? 'minmax(0, var(--strip-max-width))'
+        : 'minmax(120px, var(--strip-empty-width))')).join(' ');
+    if (stripsEl.style.getPropertyValue('--cols') !== cols) stripsEl.style.setProperty('--cols', cols);
+}
 const modal = document.getElementById('channel-config-modal');
 const modalForm = document.getElementById('channel-config-form');
 const modalChannelId = document.getElementById('config-channel-id');
@@ -100,6 +111,7 @@ modalForm.addEventListener('submit', async (e) => {
     try {
         const result = await api.setConfig(channelId, modalIp.value.trim(), modalName.value.trim());
         strips[channelId]?.update({ config: result.config, state: {}, health: result.health });
+        sizeColumns();
         closeConfigModal();
     } catch (err) {
         globalStatus.textContent = `Failed to save CH${channelId} config: ${err.message}`;
@@ -108,6 +120,11 @@ modalForm.addEventListener('submit', async (e) => {
 });
 
 initAbout();
+
+// vMix tally is pushed the moment it changes; the fast poll also carries it.
+window.rcp.onTally((tally) => {
+    for (const id of CHANNEL_IDS) strips[id]?.setTally(tally[id] ?? null);
+});
 
 async function bootstrap() {
     let sceneManager = null;
@@ -127,6 +144,7 @@ async function bootstrap() {
             strip.init(data.controls, data.channels[channelId]);
             strips[channelId] = strip;
         }
+        sizeColumns();
 
         showLinked();
         showLocked();
@@ -149,6 +167,7 @@ async function bootstrap() {
                 globalStatus.textContent = '';
                 globalStatus.classList.remove('error');
                 for (const id of CHANNEL_IDS) strips[id].update(channelsData[id]);
+                sizeColumns();
             },
             onFastError: (err) => {
                 globalStatus.textContent = `Connection to controller lost: ${err.message}`;
