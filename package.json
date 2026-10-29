@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "AG-CX370 CCU panel with NDI previews (Electron)",
+  "license": "MIT",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
