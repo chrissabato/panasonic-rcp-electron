@@ -194,8 +194,15 @@ test('the slow poll probes health and stores values changed on the camera body',
         assert.equal(state.awb_mode, 10);
         assert.equal(t.store.getHealth(1).info.model, 'AG-CX370');
 
+        // ND is shown, not a control: it comes back with the channels, never in their state.
+        t.sim.state.NdFil = '2';
+        await t.pollChannel(1);
+        assert.equal(t.handlers.getChannels().channels[1].nd_filter, '1/16');
+        assert.equal('nd_filter' in t.store.getChannelState(1), false);
+
         await t.pollChannel(2); // no IP: probed as unreachable, never read back
         assert.equal(t.store.getHealth(2).status, 'unreachable');
+        assert.equal(t.handlers.getChannels().channels[2].nd_filter, null);
     } finally {
         await t.teardown();
     }

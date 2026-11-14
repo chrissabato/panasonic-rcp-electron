@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- AG-CX370 CCU panel icon: a lens iris in the panel's accent blue, with a red tally dot.
+  <!-- Panasonic CX370 CCU icon: a lens iris in the panel's accent blue, with a red tally dot.
        Source for build/icon.ico and build/icon.png; regenerate with "npm run build:icons". -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">

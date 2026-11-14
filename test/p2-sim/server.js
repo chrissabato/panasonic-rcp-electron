@@ -24,16 +24,18 @@ function startP2Sim({
         Irs: [0, 20000], AIrsLv: [-50, 50], RGain: [-10, 10], BGain: [-10, 10],
         ZmSpd: [-49, 49], FcSpd: [-49, 49],
     },
-    values = { Irs: '3363', AIrsSw: 'Off', AIrsLv: '0', RGain: '0', BGain: '-2', WBalSel: 'B', AFcSw: 'On', RTlySw: 'Off' },
+    values = { Irs: '3363', AIrsSw: 'Off', AIrsLv: '0', RGain: '0', BGain: '-2', WBalSel: 'B', AFcSw: 'On', RTlySw: 'Off', NdFil: '1' },
     ignoredWrites = [],
     steps = {}, // field -> step size the camera snaps written values to
     unsupported = [],
     busy = [],
+    busyReads = {}, // field -> how many ":?" reads answer busy before a real one
     awbPollsBeforeSettle = 2,
     awbResult = 'Ok',
     chunked = false,
 } = {}) {
     const state = { ...values };
+    const busyReadsLeft = { ...busyReads };
     const received = [];
     const sockets = new Set();
     let nextSession = 1000;
@@ -85,6 +87,10 @@ function startP2Sim({
                 return ranges[field] ? camCtl(`$${field}:i${ranges[field][0]},${ranges[field][1]}`) : camCtl(`$${field}:i!`);
             }
             if (rest === '?') {
+                if (busyReadsLeft[field] > 0) {
+                    busyReadsLeft[field]--;
+                    return camCtl(`$${field}:#`);
+                }
                 return field in state ? camCtl(`$${field}:s${state[field]}`) : camCtl(`$${field}:!`, ' Msg="Not Supported"');
             }
             if (rest.startsWith('=')) {

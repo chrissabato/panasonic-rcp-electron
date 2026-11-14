@@ -5,11 +5,19 @@ const { P2Connection, parseP2Response, textOf } = require('./p2Connection');
 const CONTROLLER_NAME = 'PanasonicRCP';
 const AWB_SETTLED = new Set(['$Awb:sOk', '$Awb:sNg', '$Awb:sBreak']);
 const AWB_MODES = { 1: 'A', 2: 'B', 10: 'Preset' };
+/** ND filter positions by "$NdFil:?" value, matched against the camera's dial on 2026-10-24. */
+const ND_FILTERS = { 0: 'CLEAR', 1: '1/4', 2: '1/16', 3: '1/64' };
+const BUSY = 'Camera busy, command not applied';
+// A read can answer busy (":#") for a moment, seen most with another session
+// on the camera; it answers on a retry, so retry before giving up on the field.
+const READ_RETRIES = 2;
+const READ_RETRY_MS = 100;
 
 /**
  * Fields read back from the camera on each poll, and the UI control each one
  * feeds. Scaled fields carry the UI range their live "$X:c" range maps onto,
- * matching the setters below.
+ * matching the setters below. nd_filter isn't a control: the ND dial is
+ * on the camera body, so the panel only shows it.
  */
 const READBACK = [
     { control: 'iris', field: 'Irs', ui: [0, 100] },
@@ -19,6 +27,7 @@ const READBACK = [
     { control: 'auto_iris', field: 'AIrsSw', kind: 'switch' },
     { control: 'auto_focus', field: 'AFcSw', kind: 'switch' },
     { control: 'awb_mode', field: 'WBalSel', kind: 'awb' },
+    { control: 'nd_filter', field: 'NdFil', kind: 'nd' },
 ];
 
 const sameText = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
@@ -30,6 +39,7 @@ function parseReadback(kind, text) {
         if (sameText(text, 'Off')) return false;
         return null;
     }
+    if (kind === 'nd') return ND_FILTERS[text] ?? null;
     const mode = Object.keys(AWB_MODES).find((key) => sameText(AWB_MODES[key], text));
     return mode === undefined ? null : Number(mode);
 }
@@ -392,7 +402,7 @@ class ControlSession {
             return CameraResponse.unexpected(raw, `Command not supported by camera: ${command}`);
         }
         if (text !== null && text.endsWith(':#')) {
-            return CameraResponse.unexpected(raw, `Camera busy, command not applied: ${command}`);
+            return CameraResponse.unexpected(raw, `${BUSY}: ${command}`);
         }
 
         return CameraResponse.ok(text ?? raw);
@@ -400,7 +410,11 @@ class ControlSession {
 
     /** "$X:?" -> on success the body is the value text after ":s" ("$Irs:s3363" -> "3363"). */
     async readValue(field) {
-        const response = await this.camCtl(`$${field}:?`);
+        let response = await this.camCtl(`$${field}:?`);
+        for (let retry = 0; retry < READ_RETRIES && response.error?.startsWith(BUSY); retry++) {
+            await sleep(READ_RETRY_MS);
+            response = await this.camCtl(`$${field}:?`);
+        }
         if (!response.isOk()) {
             return response;
         }

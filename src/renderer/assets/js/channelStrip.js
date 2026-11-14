@@ -97,6 +97,18 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
             buildRockerRow('focus', schema.focus),
         ], buildInlineToggle('auto_focus', schema.auto_focus, 'AF')));
 
+        // Under Lens: the left column has room to spare, the iris column doesn't.
+        const recallRow = document.createElement('div');
+        recallRow.className = 'strip-recall-row';
+        const recallBtn = document.createElement('button');
+        recallBtn.className = 'strip-recall-btn';
+        recallBtn.type = 'button';
+        recallBtn.textContent = 'Recall last scene';
+        recallBtn.title = 'Recall the last-recalled scene onto this channel only';
+        recallBtn.addEventListener('click', () => onQuickRecall?.(channelId));
+        recallRow.append(recallBtn);
+        main.append(recallRow);
+
         // Only one of Iris and Exp Comp applies at a time: manual iris is
         // overridden by the camera's auto loop, and Exp Comp only steers auto
         // iris. updateIrisMode() shows the one that matches Auto Iris.
@@ -106,7 +118,11 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         irisCol.className = 'strip-col strip-col-iris';
         const autoIris = buildInlineToggle('auto_iris', schema.auto_iris, 'AUTO');
         autoIris.classList.add('fader-auto');
-        irisCol.append(section('Iris', [els.irisCell, els.expCompCell, autoIris]));
+        // ND is set on the camera body's dial, so the panel only shows it.
+        els.nd = document.createElement('span');
+        els.nd.className = 'nd-readout';
+        els.nd.title = 'ND filter, set on the camera';
+        irisCol.append(section('Iris', [els.irisCell, els.expCompCell, autoIris], els.nd));
 
         controls.append(main, irisCol);
 
@@ -122,17 +138,7 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
         setIpBtn.addEventListener('click', () => onConfigOpen?.(channelId, currentConfig));
         els.emptyCard.append(emptyText, setIpBtn);
 
-        const recallRow = document.createElement('div');
-        recallRow.className = 'strip-recall-row';
-        const recallBtn = document.createElement('button');
-        recallBtn.className = 'strip-recall-btn';
-        recallBtn.type = 'button';
-        recallBtn.textContent = 'Recall last scene';
-        recallBtn.title = 'Recall the last-recalled scene onto this channel only';
-        recallBtn.addEventListener('click', () => onQuickRecall?.(channelId));
-        recallRow.append(recallBtn);
-
-        root.append(header, els.healthNote, preview.el, els.tally, controls, recallRow, els.emptyCard);
+        root.append(header, els.healthNote, preview.el, els.tally, controls, els.emptyCard);
 
         update(channelData);
     }
@@ -350,6 +356,7 @@ export function createChannelStrip(channelId, root, { onConfigOpen, onQuickRecal
 
         updateHealth(channelData.health);
         if ('tally' in channelData) setTally(channelData.tally);
+        if ('nd_filter' in channelData) els.nd.textContent = `ND ${channelData.nd_filter ?? '—'}`;
     }
 
     // status is a CameraState from the main process: ok, unreachable,

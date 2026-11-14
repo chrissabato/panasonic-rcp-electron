@@ -28,7 +28,7 @@ function buildAppMenu({ panelUrl }) {
         {
             role: 'help',
             submenu: [
-                { label: 'About AG-CX370 CCU', click: (_item, win) => showAbout(win) },
+                { label: 'About Panasonic CX370 CCU', click: (_item, win) => showAbout(win) },
                 { type: 'separator' },
                 { label: 'NDI® website (ndi.video)', click: () => shell.openExternal(NDI_URL) },
             ],

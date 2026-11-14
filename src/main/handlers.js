@@ -47,6 +47,9 @@ const FAILURE_CODES = {
  */
 function createHandlers(ctx) {
     const { store, queue, clientFor, log = console.warn } = ctx;
+    // ND filter position per channel, from the slow poll. Shown, never set, so
+    // it's kept out of channel_state and saved scenes.
+    const ndFilters = new Map();
 
     /** Updates cached health from a control command's outcome. Unexpected replies leave it alone, as in the PHP. */
     function recordCommandHealth(channelId, response) {
@@ -112,7 +115,8 @@ function createHandlers(ctx) {
             return;
         }
         for (const [control, value] of Object.entries(response.body)) {
-            store.setControlValue(channelId, control, value);
+            if (control === 'nd_filter') ndFilters.set(channelId, value);
+            else store.setControlValue(channelId, control, value);
         }
     }
 
@@ -121,6 +125,8 @@ function createHandlers(ctx) {
         const health = await checkHealth(channelId);
         if (health.status === CameraState.OK) {
             await refreshValues(channelId);
+        } else {
+            ndFilters.delete(channelId); // don't show a stale position for a camera we can't reach
         }
     }
 
@@ -132,6 +138,7 @@ function createHandlers(ctx) {
                 state: store.getChannelState(channelId),
                 health: store.getHealth(channelId),
                 tally: ctx.tallyFor?.(channelId) ?? null,
+                nd_filter: ndFilters.get(channelId) ?? null,
             };
         }
         return { channels, controls: registry.all() };

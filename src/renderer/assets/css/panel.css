@@ -260,6 +260,7 @@ body:has(> .strips) {
 .inline-toggle { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; letter-spacing: .06em; color: var(--text-dim); cursor: pointer; }
 .inline-toggle .toggle-switch { transform: scale(0.85); transform-origin: right center; }
 .fader-auto { align-self: center; }
+.nd-readout { font-size: 10px; font-weight: 700; letter-spacing: .06em; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .fader-auto .toggle-switch { transform-origin: center; }
 
 /* Paint: AWB mode and trigger on one line, the R/B pad under them. */
@@ -321,7 +322,6 @@ body:has(> .strips) {
 .strip.unconfigured .ndi-preview,
 .strip.unconfigured .tally-lamp,
 .strip.unconfigured .strip-body,
-.strip.unconfigured .strip-recall-row,
 .strip.unconfigured .strip-pills,
 .strip.unconfigured .health-note { display: none; }
 .strip.unconfigured .strip-header { flex-direction: column; align-items: flex-start; gap: 4px; }
@@ -484,16 +484,17 @@ body:has(> .strips) {
 .scene-row button.danger:hover { color: var(--red); border-color: var(--red); }
 .scene-result { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
 
-.strip-recall-row { display: flex; justify-content: flex-end; }
+.strip-recall-row { display: flex; }
 .strip-recall-btn {
     background: none;
     border: 1px solid var(--border);
     color: var(--text-dim);
     font-size: 10px;
     font-weight: 500;
-    padding: 4px 10px;
+    padding: 6px 10px;
     border-radius: 4px;
     cursor: pointer;
+    flex: 1;
 }
 .strip-recall-btn:hover { color: var(--text); border-color: var(--accent); }
 

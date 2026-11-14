@@ -61,6 +61,7 @@ test('readValues maps the camera\'s values onto UI controls', () => withSim({}, 
         auto_iris: false,
         auto_focus: true,
         awb_mode: 2, // B
+        nd_filter: '1/4',
     });
 }));
 
@@ -68,6 +69,22 @@ test('readValues leaves out fields the camera rejects', () => withSim({ values: 
     const response = await clientFor(sim).readValues();
     assert.ok(response.isOk());
     assert.deepEqual(response.body, { iris: 100, awb_mode: 10 });
+}));
+
+test('readValues names the ND filter position, and leaves out an unknown one', async () => {
+    for (const [raw, expected] of [['0', 'CLEAR'], ['3', '1/64'], ['7', undefined]]) {
+        await withSim({ values: { NdFil: raw } }, async (sim) => {
+            const response = await clientFor(sim).readValues();
+            assert.equal(response.body.nd_filter, expected);
+        });
+    }
+});
+
+test('readValues retries a read the camera answers busy', () => withSim({ busyReads: { NdFil: 2, Irs: 5 } }, async (sim) => {
+    const response = await clientFor(sim).readValues();
+    assert.equal(response.body.nd_filter, '1/4', 'answered on the third try');
+    assert.equal('iris' in response.body, false, 'still busy after the retries, so left out');
+    assert.equal(sim.received.filter((c) => c === '$Irs:?').length, 3);
 }));
 
 test('readValues reports a login failure', () => withSim({}, async (sim) => {

@@ -1,4 +1,4 @@
-# AG-CX370 CCU Panel — Electron + NDI plan
+# Panasonic CX370 CCU — Electron + NDI plan
 
 An Electron desktop version of the CCU panel in `/claude/panasonic-rcp`, adding a live NDI preview for each of the 4 channels. The app runs on a machine already on the camera network and talks to the cameras directly, so no web server and no firewall changes are needed.
 
@@ -221,8 +221,9 @@ Tested against an AG-CX370, serial DV24782369EC48, on 2026-10-22 and 2026-10-23.
   | `$AgcSw` | On/Off | Auto gain; read Off. |
   | `$DtlSw`, `$OisSw` | On/Off | Detail and optical image stabiliser; both read On. |
   | `$FcPos` | 9000..82500 | Focus position range; `:?` gives no value. |
+  | `$NdFil` | 0..3 (`:c` answers `:i!`) | ND filter position, read-only in the app (the ND dial is on the camera body): 0 CLEAR, 1 1/4, 2 1/16, 3 1/64. Found and checked against the dial on 2026-10-24: CLEAR read 0, 1/64 read 3. Shown in each strip's Iris heading, refreshed on the slow poll. Writes not tried. |
 
-  Probed 2026-10-23 (camera at 192.168.4.24), read-only except the pedestal, gain and R gain writes above, which were restored. **No answer** from any guessed name for shutter (`$Shtr`, `$ShtrSw`, `$ShtrSel`, …), ND (`$ND`, `$NdSw`, `$NdFlt`, …) or an F-number (`$FNo`, `$IrsF`, …), so the iris fader shows the raw 0–100 value. The camera has no read-only way to list a field's options: other query forms (`:l`, `:L`, `:r`, …) answer busy (`:#`).
+  Probed 2026-10-23 (camera at 192.168.4.24), read-only except the pedestal, gain and R gain writes above, which were restored. **No answer** from any guessed name for shutter (`$Shtr`, `$ShtrSw`, `$ShtrSel`, …), ND (`$ND`, `$NdSw`, `$NdFlt`, …; it turned out to be `$NdFil`, found 2026-10-24) or an F-number (`$FNo`, `$IrsF`, …), so the iris fader shows the raw 0–100 value. The camera has no read-only way to list a field's options: other query forms (`:l`, `:L`, `:r`, …) answer busy (`:#`).
 
 - **Intermittent `not_applied`:** once on 2026-10-23, auto iris Off and an Exp Comp drag were acknowledged but read back different values. Neither reproduced later the same day. The suspected cause is another controller connected at the same time; the next occurrence's error will show the camera's value.
 - **Unresolved:** what gates paint and pedestal writes. R gain writes were ignored on 2026-10-22 but applied on 2026-10-23; master pedestal writes are still ignored. To investigate, compare the camera's menu settings (WB mode, scene file, any remote/paint lock) between a state where writes apply and one where they don't.
